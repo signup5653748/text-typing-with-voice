@@ -1,0 +1,6 @@
+{
+  "name": "VoiceType Editor",
+  "description": "A plain-text editor designed to be fully usable without TalkBack or any screen reader.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
