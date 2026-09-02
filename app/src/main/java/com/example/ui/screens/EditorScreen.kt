@@ -45,7 +45,6 @@ fun EditorScreen(
     onNavigateToSettings: () -> Unit,
     viewModel: EditorViewModel = viewModel()
 ) {
-    val textValue by viewModel.textValue.collectAsState()
     val kActive by viewModel.kActive.collectAsState()
     val pActive by viewModel.pActive.collectAsState()
     val selActive by viewModel.selActive.collectAsState()
@@ -76,7 +75,7 @@ fun EditorScreen(
     val defaultOrder = listOf(ActionButton.CUT, ActionButton.COPY, ActionButton.K, ActionButton.P, ActionButton.DELETE, ActionButton.PASTE, ActionButton.ENTER)
     val actualOrder = if (buttonOrder.isEmpty()) defaultOrder else buttonOrder
 
-    var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
     var menuExpanded by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
@@ -143,7 +142,10 @@ fun EditorScreen(
                 .background(Color(0xFF0C0D10))
                 .padding(padding)
         ) {
-            Box(
+            EditorTextArea(
+                viewModel = viewModel,
+                kbLockActive = kbLockActive,
+                onTextLayout = { layoutResult.value = it },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
@@ -152,31 +154,7 @@ fun EditorScreen(
                     .background(Color.Black)
                     .border(1.dp, Color(0xFF202228), RoundedCornerShape(10.dp))
                     .padding(14.dp)
-            ) {
-                if (textValue.text.isEmpty()) {
-                    Text("Type something here", color = Color(0xFF5A5D66))
-                }
-                
-                val customTextSelectionColors = TextSelectionColors(
-                    handleColor = Color.Transparent,
-                    backgroundColor = Color.Yellow.copy(alpha = 0.5f)
-                )
-                CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
-                    BasicTextField(
-                        value = textValue,
-                        onValueChange = viewModel::onTextChanged,
-                        modifier = Modifier.fillMaxSize(),
-                        readOnly = kbLockActive,
-                        textStyle = TextStyle(
-                            color = Color(0xFFECEEF2),
-                            fontSize = 17.sp,
-                            lineHeight = 25.5.sp
-                        ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        onTextLayout = { layoutResult = it }
-                    )
-                }
-            }
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -247,8 +225,8 @@ fun EditorScreen(
                     ArrowKeyCluster(
                         selActive = selActive,
                         scale = settings.arrowSize,
-                        onMoveUp = { viewModel.moveUp(layoutResult) },
-                        onMoveDown = { viewModel.moveDown(layoutResult) },
+                        onMoveUp = { viewModel.moveUp(layoutResult.value) },
+                        onMoveDown = { viewModel.moveDown(layoutResult.value) },
                         onMoveLeft = viewModel::moveLeft,
                         onMoveRight = viewModel::moveRight,
                         onToggleSel = viewModel::toggleSel
@@ -294,5 +272,41 @@ fun EditorScreen(
 
     if (showLanguagePicker) {
         LanguagePickerSheet(viewModel)
+    }
+}
+
+@Composable
+fun EditorTextArea(
+    viewModel: EditorViewModel,
+    kbLockActive: Boolean,
+    onTextLayout: (TextLayoutResult) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val textValue by viewModel.textValue.collectAsState()
+    
+    Box(modifier = modifier) {
+        if (textValue.text.isEmpty()) {
+            Text("Type something here", color = Color(0xFF5A5D66))
+        }
+        
+        val customTextSelectionColors = TextSelectionColors(
+            handleColor = Color.Transparent,
+            backgroundColor = Color.Yellow.copy(alpha = 0.5f)
+        )
+        CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
+            BasicTextField(
+                value = textValue,
+                onValueChange = viewModel::onTextChanged,
+                modifier = Modifier.fillMaxSize(),
+                readOnly = kbLockActive,
+                textStyle = TextStyle(
+                    color = Color(0xFFECEEF2),
+                    fontSize = 17.sp,
+                    lineHeight = 25.5.sp
+                ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                onTextLayout = onTextLayout
+            )
+        }
     }
 }

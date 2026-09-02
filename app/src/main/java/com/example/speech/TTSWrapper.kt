@@ -20,9 +20,10 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
 
     private var currentStartOffset = 0
 
-    init {
-        tts = TextToSpeech(context, this)
-    }
+    private var isInitializing = false
+    private var pendingText: String? = null
+    private var pendingStartOffset = 0
+    private val appContext = context.applicationContext
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -48,10 +49,25 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
                     _currentRange.value = Pair(currentStartOffset + start, currentStartOffset + end)
                 }
             })
+            pendingText?.let {
+                play(it, pendingStartOffset)
+                pendingText = null
+            }
+        } else {
+            isInitializing = false
         }
     }
 
     fun play(text: String, startOffset: Int = 0) {
+        if (tts == null) {
+            pendingText = text
+            pendingStartOffset = startOffset
+            if (!isInitializing) {
+                isInitializing = true
+                tts = TextToSpeech(appContext, this)
+            }
+            return
+        }
         if (!isInitialized) return
         val textToRead = text.substring(startOffset)
         if (textToRead.isBlank()) return

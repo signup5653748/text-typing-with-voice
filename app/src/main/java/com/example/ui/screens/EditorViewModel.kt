@@ -299,41 +299,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onAction(action: ActionButton) {
-        when(action) {
+        when (action) {
             ActionButton.K -> toggleK()
             ActionButton.P -> toggleP()
-            ActionButton.ENTER -> insertTextAtCursor("\n")
-            ActionButton.DELETE -> {
-                val current = _textValue.value
-                if (current.selection.length > 0) {
-                    insertTextAtCursor("")
-                } else if (current.selection.min > 0) {
-                    val start = current.selection.min - 1
-                    val newString = current.text.substring(0, start) + current.text.substring(current.selection.min)
-                    _textValue.value = current.copy(text = newString, selection = TextRange(start), composition = null)
+            else -> {
+                val clipboardText = if (action == ActionButton.PASTE) pasteFromClipboard() else null
+                _textValue.value = com.example.logic.TextActionLogic.handleAction(
+                    action = action,
+                    currentValue = _textValue.value,
+                    clipboardText = clipboardText,
+                    onCopy = { copyToClipboard(it) }
+                )
+                if (action != ActionButton.PASTE && action != ActionButton.ENTER) {
                     resetCursorState()
-                }
-            }
-            ActionButton.CUT -> {
-                if (currentSelectionLength() > 0) {
-                    val text = _textValue.value.text.substring(_textValue.value.selection.min, _textValue.value.selection.max)
-                    copyToClipboard(text)
-                    insertTextAtCursor("")
                 } else {
-                    resetCursorState()
-                }
-            }
-            ActionButton.COPY -> {
-                if (currentSelectionLength() > 0) {
-                    val text = _textValue.value.text.substring(_textValue.value.selection.min, _textValue.value.selection.max)
-                    copyToClipboard(text)
-                }
-                resetCursorState()
-            }
-            ActionButton.PASTE -> {
-                val text = pasteFromClipboard()
-                if (text.isNotEmpty()) {
-                    insertTextAtCursor(text)
+                    selAnchor = null
+                    _selActive.value = false
+                    idealX = null
                 }
             }
         }

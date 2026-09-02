@@ -110,53 +110,14 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                         when(action) {
                             ActionButton.K -> kActive = !kActive
                             ActionButton.P -> pActive = !pActive
-                            ActionButton.ENTER -> {
-                                val current = previewText
-                                val start = current.selection.min
-                                val end = current.selection.max
-                                val newString = current.text.substring(0, start) + "\n" + current.text.substring(end)
-                                previewText = current.copy(text = newString, selection = TextRange(start + 1), composition = null)
-                            }
-                            ActionButton.DELETE -> {
-                                val current = previewText
-                                if (current.selection.length > 0) {
-                                    val start = current.selection.min
-                                    val end = current.selection.max
-                                    val newString = current.text.substring(0, start) + current.text.substring(end)
-                                    previewText = current.copy(text = newString, selection = TextRange(start), composition = null)
-                                } else if (current.selection.min > 0) {
-                                    val start = current.selection.min - 1
-                                    val newString = current.text.substring(0, start) + current.text.substring(current.selection.min)
-                                    previewText = current.copy(text = newString, selection = TextRange(start), composition = null)
-                                }
-                            }
-                            ActionButton.CUT -> {
-                                if (previewText.selection.length > 0) {
-                                    val start = previewText.selection.min
-                                    val end = previewText.selection.max
-                                    val text = previewText.text.substring(start, end)
-                                    viewModel.copyToClipboard(text)
-                                    val newString = previewText.text.substring(0, start) + previewText.text.substring(end)
-                                    previewText = previewText.copy(text = newString, selection = TextRange(start), composition = null)
-                                }
-                            }
-                            ActionButton.COPY -> {
-                                if (previewText.selection.length > 0) {
-                                    val start = previewText.selection.min
-                                    val end = previewText.selection.max
-                                    val text = previewText.text.substring(start, end)
-                                    viewModel.copyToClipboard(text)
-                                }
-                            }
-                            ActionButton.PASTE -> {
-                                val text = viewModel.pasteFromClipboard()
-                                if (text.isNotEmpty()) {
-                                    val current = previewText
-                                    val start = current.selection.min
-                                    val end = current.selection.max
-                                    val newString = current.text.substring(0, start) + text + current.text.substring(end)
-                                    previewText = current.copy(text = newString, selection = TextRange(start + text.length), composition = null)
-                                }
+                            else -> {
+                                val clipboardText = if (action == ActionButton.PASTE) viewModel.pasteFromClipboard() else null
+                                previewText = com.example.logic.TextActionLogic.handleAction(
+                                    action = action,
+                                    currentValue = previewText,
+                                    clipboardText = clipboardText,
+                                    onCopy = { viewModel.copyToClipboard(it) }
+                                )
                             }
                         }
                     },

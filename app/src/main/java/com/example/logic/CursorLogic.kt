@@ -67,7 +67,7 @@ object CursorLogic {
         val anchor = if (isSelActive) {
             currentSelAnchor ?: caret
         } else {
-            caret // If SEL is off, transient highlight spans exactly the movement path
+            newCaret // If SEL is off, the anchor moves with the caret
         }
         
         if (isSelActive && newSelAnchor == null) {
