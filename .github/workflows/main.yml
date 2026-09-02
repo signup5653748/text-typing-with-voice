@@ -220,7 +220,12 @@ jobs:
         if [ "${{ needs.detect.outputs.uses_keystore_path_env }}" = "true" ]; then
           export KEYSTORE_PATH="$(pwd)/${{ needs.detect.outputs.keystore_filename }}"
         fi
-        ./gradlew ${{ needs.detect.outputs.gradle_task }} --stacktrace --info
+        # --no-daemon forces a fresh JVM for this build, avoiding daemon
+        # reuse across the earlier "gradle wrapper" invocation - reused
+        # daemons are a known cause of KSP crashing with
+        # "ApplicationManager.getApplication() is null" (corrupted
+        # IntelliJ-platform static state carried over between invocations).
+        ./gradlew ${{ needs.detect.outputs.gradle_task }} --no-daemon --stacktrace --info
 
     - name: Wipe Keystore from Runner
       if: always()
@@ -242,12 +247,9 @@ jobs:
         fi
         echo "$FOUND" | while read -r apk; do cp "$apk" "./build-artifacts/"; done
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: MyApp-${{ env.RELEASE_TAG }}-APK
-        path: build-artifacts/*.apk
-        if-no-files-found: error
+    # No separate artifact upload - the APK is already fully available via
+    # the versioned release and the rolling "latest" release below, and a
+    # duplicate upload-artifact copy was hitting GitHub's storage quota.
 
     # Real, unique tag every run (v1, v2, v3...) instead of a static "latest"
     # tag - this is what lets release history actually accumulate instead of
