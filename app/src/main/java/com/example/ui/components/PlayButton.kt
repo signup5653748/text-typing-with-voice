@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -18,7 +21,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
+
+val StopIcon: ImageVector
+    get() = ImageVector.Builder(
+        name = "Stop",
+        defaultWidth = 24.dp,
+        defaultHeight = 24.dp,
+        viewportWidth = 24f,
+        viewportHeight = 24f
+    ).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(6f, 6f)
+            horizontalLineToRelative(12f)
+            verticalLineToRelative(12f)
+            horizontalLineTo(6f)
+            close()
+        }
+    }.build()
+
 @Composable
+
 fun PlayButton(
     isPlaying: Boolean,
     onClick: () -> Unit,
@@ -38,7 +60,7 @@ fun PlayButton(
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
+            imageVector = if (isPlaying) StopIcon else Icons.Default.PlayArrow,
             contentDescription = "Play/Stop",
             tint = textColor,
             modifier = Modifier.size(24.dp)

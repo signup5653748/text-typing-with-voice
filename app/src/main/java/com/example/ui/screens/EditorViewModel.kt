@@ -6,7 +6,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ActionButton
-import com.example.data.SettingsDatabase
+import com.example.data.SettingsEntity
 import com.example.data.SettingsRepository
 import com.example.logic.ArrowDirection
 import com.example.logic.CursorLogic
@@ -16,8 +16,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
-    private val settingsDao = SettingsDatabase.getDatabase(application).settingsDao()
-    private val settingsRepo = SettingsRepository(settingsDao)
+    private val settingsRepo = SettingsRepository(application)
     
     val speechWrapper = SpeechRecognitionWrapper(application)
     val ttsWrapper = TTSWrapper(application)
