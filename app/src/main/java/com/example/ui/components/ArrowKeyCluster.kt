@@ -2,6 +2,14 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -59,7 +67,7 @@ private fun ArrowButton(
             .size(size)
             .clip(RoundedCornerShape(9.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
+            .instantClickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -84,7 +92,7 @@ private fun SelButton(
             .size(size)
             .clip(RoundedCornerShape(9.dp))
             .background(bgColor)
-            .clickable(onClick = onClick),
+            .instantClickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -94,4 +102,23 @@ private fun SelButton(
             fontSize = 9.5.sp
         )
     }
+}
+
+@Composable
+fun Modifier.instantClickable(onClick: () -> Unit): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val coroutineScope = rememberCoroutineScope()
+    return this
+        .indication(interactionSource, androidx.compose.foundation.LocalIndication.current)
+        .pointerInput(Unit) {
+            detectTapGestures(
+                onPress = { offset ->
+                    val press = PressInteraction.Press(offset)
+                    coroutineScope.launch { interactionSource.emit(press) }
+                    onClick()
+                    tryAwaitRelease()
+                    coroutineScope.launch { interactionSource.emit(PressInteraction.Release(press)) }
+                }
+            )
+        }
 }

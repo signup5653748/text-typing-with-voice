@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.instantClickable
 
 @Composable
 fun ModeToggleButton(
@@ -28,7 +29,7 @@ fun ModeToggleButton(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
-            .clickable(onClick = onClick)
+            .instantClickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {

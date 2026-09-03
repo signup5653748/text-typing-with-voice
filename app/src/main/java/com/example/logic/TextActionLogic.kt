@@ -3,6 +3,8 @@ package com.example.logic
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.example.data.ActionButton
+import kotlin.math.max
+import kotlin.math.min
 
 object TextActionLogic {
     fun handleAction(
@@ -11,52 +13,74 @@ object TextActionLogic {
         clipboardText: String? = null,
         onCopy: (String) -> Unit = {}
     ): TextFieldValue {
-        var newValue = currentValue
-        when (action) {
+        val text = currentValue.text
+        val selStart = min(currentValue.selection.start, currentValue.selection.end).coerceIn(0, text.length)
+        val selEnd = max(currentValue.selection.start, currentValue.selection.end).coerceIn(0, text.length)
+        val hasSelection = selStart != selEnd
+
+        return when (action) {
             ActionButton.ENTER -> {
-                val start = newValue.selection.min
-                val end = newValue.selection.max
-                val newString = newValue.text.substring(0, start) + "\n" + newValue.text.substring(end)
-                newValue = newValue.copy(text = newString, selection = TextRange(start + 1), composition = null)
+                val newString = text.substring(0, selStart) + "\n" + text.substring(selEnd)
+                TextFieldValue(
+                    text = newString,
+                    selection = TextRange(selStart + 1, selStart + 1),
+                    composition = null
+                )
             }
             ActionButton.DELETE -> {
-                if (newValue.selection.length > 0) {
-                    val start = newValue.selection.min
-                    val end = newValue.selection.max
-                    val newString = newValue.text.substring(0, start) + newValue.text.substring(end)
-                    newValue = newValue.copy(text = newString, selection = TextRange(start), composition = null)
-                } else if (newValue.selection.min > 0) {
-                    val start = newValue.selection.min - 1
-                    val newString = newValue.text.substring(0, start) + newValue.text.substring(newValue.selection.min)
-                    newValue = newValue.copy(text = newString, selection = TextRange(start), composition = null)
+                if (hasSelection) {
+                    val newString = text.substring(0, selStart) + text.substring(selEnd)
+                    TextFieldValue(
+                        text = newString,
+                        selection = TextRange(selStart, selStart),
+                        composition = null
+                    )
+                } else if (selStart > 0) {
+                    val newString = text.substring(0, selStart - 1) + text.substring(selStart)
+                    TextFieldValue(
+                        text = newString,
+                        selection = TextRange(selStart - 1, selStart - 1),
+                        composition = null
+                    )
+                } else {
+                    currentValue
                 }
             }
             ActionButton.CUT -> {
-                if (newValue.selection.length > 0) {
-                    val start = newValue.selection.min
-                    val end = newValue.selection.max
-                    onCopy(newValue.text.substring(start, end))
-                    val newString = newValue.text.substring(0, start) + newValue.text.substring(end)
-                    newValue = newValue.copy(text = newString, selection = TextRange(start), composition = null)
+                if (hasSelection) {
+                    val cutText = text.substring(selStart, selEnd)
+                    onCopy(cutText)
+                    val newString = text.substring(0, selStart) + text.substring(selEnd)
+                    TextFieldValue(
+                        text = newString,
+                        selection = TextRange(selStart, selStart),
+                        composition = null
+                    )
+                } else {
+                    currentValue
                 }
             }
             ActionButton.COPY -> {
-                if (newValue.selection.length > 0) {
-                    val start = newValue.selection.min
-                    val end = newValue.selection.max
-                    onCopy(newValue.text.substring(start, end))
+                if (hasSelection) {
+                    val copyText = text.substring(selStart, selEnd)
+                    onCopy(copyText)
                 }
+                currentValue
             }
             ActionButton.PASTE -> {
                 if (!clipboardText.isNullOrEmpty()) {
-                    val start = newValue.selection.min
-                    val end = newValue.selection.max
-                    val newString = newValue.text.substring(0, start) + clipboardText + newValue.text.substring(end)
-                    newValue = newValue.copy(text = newString, selection = TextRange(start + clipboardText.length), composition = null)
+                    val newString = text.substring(0, selStart) + clipboardText + text.substring(selEnd)
+                    val newCaret = selStart + clipboardText.length
+                    TextFieldValue(
+                        text = newString,
+                        selection = TextRange(newCaret, newCaret),
+                        composition = null
+                    )
+                } else {
+                    currentValue
                 }
             }
-            else -> {}
+            else -> currentValue
         }
-        return newValue
     }
 }

@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Application
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
@@ -24,19 +25,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val settings = settingsRepo.settings.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5000),
-        com.example.data.SettingsEntity()
+        SettingsEntity()
     )
 
     private val initialText = "This is the first predefined line for testing.\n" +
             "This is the second line with some more text.\n" +
-            "And this is the third line to complete the initial setup."
+            "\n" +
+            "And this is the fourth line after a blank line to complete the setup."
 
     private val _textValue = MutableStateFlow(TextFieldValue(initialText))
     val textValue: StateFlow<TextFieldValue> = _textValue.asStateFlow()
 
+    private val _transientHighlightRange = MutableStateFlow<TextRange?>(null)
+    val transientHighlightRange: StateFlow<TextRange?> = _transientHighlightRange.asStateFlow()
+
+    // Default: K is false -> word by word; when true -> character by character
     private val _kActive = MutableStateFlow(false)
     val kActive: StateFlow<Boolean> = _kActive.asStateFlow()
 
+    // Default: P is false -> line by line; when true -> paragraph by paragraph
     private val _pActive = MutableStateFlow(false)
     val pActive: StateFlow<Boolean> = _pActive.asStateFlow()
 
@@ -82,21 +89,47 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onTextChanged(newValue: TextFieldValue) {
+        if (_textValue.value == newValue) return
         _textValue.value = newValue
-        resetCursorState()
+        if (_selActive.value) {
+            _selActive.value = false
+        }
+        selAnchor = null
+        idealX = null
+        _transientHighlightRange.value = null
     }
 
-    fun toggleK() { _kActive.value = !_kActive.value }
-    fun toggleP() { _pActive.value = !_pActive.value }
+    // Toggle K without resetting active selection
+    fun toggleK() { 
+        _kActive.value = !_kActive.value 
+    }
+
+    // Toggle P without resetting active selection
+    fun toggleP() { 
+        _pActive.value = !_pActive.value 
+    }
     
     fun toggleSel() { 
-        _selActive.value = !_selActive.value 
+        val newSel = !_selActive.value
+        _selActive.value = newSel
         val current = _textValue.value
-        if (_selActive.value) {
+        if (newSel) {
+            // Lock anchor at current caret position
             selAnchor = current.selection.end
+            _transientHighlightRange.value = null
+            _textValue.value = current.copy(
+                selection = TextRange(selAnchor!!, selAnchor!!),
+                composition = null
+            )
         } else {
+            // Deselect: return cursor to normal single caret
             selAnchor = null
-            _textValue.value = current.copy(selection = TextRange(current.selection.end, current.selection.end))
+            val caret = current.selection.end
+            _textValue.value = current.copy(
+                selection = TextRange(caret, caret),
+                composition = null
+            )
+            _transientHighlightRange.value = null
         }
     }
     
@@ -115,8 +148,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun openLanguagePicker() { _showLanguagePicker.value = true }
     fun closeLanguagePicker() { _showLanguagePicker.value = false }
     fun setLanguage(language: String) {
-        viewModelScope.launch { settingsRepo.updateVoiceLanguage(language) }
-        closeLanguagePicker()
+        viewModelScope.launch {
+            settingsRepo.updateVoiceLanguage(language)
+            closeLanguagePicker()
+        }
     }
 
     fun loadFromUri(uri: android.net.Uri) {
@@ -249,51 +284,66 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun resetCursorState() {
-        if (_selActive.value) {
-            _selActive.value = false
-        }
+        _selActive.value = false
         selAnchor = null
         idealX = null
+        _transientHighlightRange.value = null
         val current = _textValue.value
         if (current.selection.start != current.selection.end) {
-            _textValue.value = current.copy(selection = TextRange(current.selection.end, current.selection.end))
+            _textValue.value = current.copy(
+                selection = TextRange(current.selection.end, current.selection.end),
+                composition = null
+            )
         }
     }
 
-    private fun handleArrow(direction: ArrowDirection, layoutResult: androidx.compose.ui.text.TextLayoutResult? = null) {
-        val (newValue, newX, newAnchor) = CursorLogic.handleArrow(
-            _textValue.value,
-            direction,
-            _kActive.value,
-            !_pActive.value,
-            _selActive.value,
-            layoutResult,
-            idealX,
-            selAnchor
+    private fun handleArrow(direction: ArrowDirection, layoutResult: TextLayoutResult? = null) {
+        val res = CursorLogic.handleArrow(
+            value = _textValue.value,
+            direction = direction,
+            isCharacterMode = _kActive.value, // K active: char by char; K off: word by word
+            isParagraphMode = _pActive.value, // P active: paragraph by paragraph; P off: line by line
+            isSelActive = _selActive.value,
+            layoutResult = layoutResult,
+            currentIdealX = idealX,
+            currentSelAnchor = selAnchor
         )
-        _textValue.value = newValue
-        idealX = newX
-        selAnchor = newAnchor
+        _textValue.value = res.value
+        idealX = res.idealX
+        selAnchor = res.selAnchor
+        _transientHighlightRange.value = res.transientHighlightRange
     }
 
     fun moveLeft() = handleArrow(ArrowDirection.LEFT)
     fun moveRight() = handleArrow(ArrowDirection.RIGHT)
-    fun moveUp(layoutResult: androidx.compose.ui.text.TextLayoutResult?) = handleArrow(ArrowDirection.UP, layoutResult)
-    fun moveDown(layoutResult: androidx.compose.ui.text.TextLayoutResult?) = handleArrow(ArrowDirection.DOWN, layoutResult)
+    fun moveUp(layoutResult: TextLayoutResult?) = handleArrow(ArrowDirection.UP, layoutResult)
+    fun moveDown(layoutResult: TextLayoutResult?) = handleArrow(ArrowDirection.DOWN, layoutResult)
 
     fun jumpStart() {
         val end = 0
-        val anchor = if (_selActive.value) (selAnchor ?: _textValue.value.selection.end) else end
-        selAnchor = if (_selActive.value) anchor else null
-        _textValue.value = _textValue.value.copy(selection = TextRange(anchor, end))
+        if (_selActive.value) {
+            val anchor = selAnchor ?: _textValue.value.selection.end
+            selAnchor = anchor
+            _textValue.value = _textValue.value.copy(selection = TextRange(anchor, end), composition = null)
+            _transientHighlightRange.value = null
+        } else {
+            _textValue.value = _textValue.value.copy(selection = TextRange(end, end), composition = null)
+            _transientHighlightRange.value = CursorLogic.getWordRangeAt(_textValue.value.text, 0)
+        }
         idealX = null
     }
 
     fun jumpEnd() {
         val end = _textValue.value.text.length
-        val anchor = if (_selActive.value) (selAnchor ?: _textValue.value.selection.end) else end
-        selAnchor = if (_selActive.value) anchor else null
-        _textValue.value = _textValue.value.copy(selection = TextRange(anchor, end))
+        if (_selActive.value) {
+            val anchor = selAnchor ?: _textValue.value.selection.end
+            selAnchor = anchor
+            _textValue.value = _textValue.value.copy(selection = TextRange(anchor, end), composition = null)
+            _transientHighlightRange.value = null
+        } else {
+            _textValue.value = _textValue.value.copy(selection = TextRange(end, end), composition = null)
+            _transientHighlightRange.value = CursorLogic.getWordRangeAt(_textValue.value.text, if (end > 0) end - 1 else 0)
+        }
         idealX = null
     }
 
@@ -309,18 +359,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     clipboardText = clipboardText,
                     onCopy = { copyToClipboard(it) }
                 )
-                if (action != ActionButton.PASTE && action != ActionButton.ENTER) {
-                    resetCursorState()
-                } else {
-                    selAnchor = null
-                    _selActive.value = false
-                    idealX = null
-                }
+                // Always return cursor to a normal single caret after Cut, Copy, Delete, Paste, Enter
+                resetCursorState()
             }
         }
     }
-    
-    private fun currentSelectionLength() = _textValue.value.selection.length
 
     fun copyToClipboard(text: String) {
         val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
