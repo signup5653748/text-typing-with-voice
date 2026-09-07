@@ -7,6 +7,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ActionButton
+import com.example.data.ControlElement
 import com.example.data.SettingsEntity
 import com.example.data.SettingsRepository
 import com.example.logic.ArrowDirection
@@ -65,6 +66,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _showLanguagePicker = MutableStateFlow(false)
     val showLanguagePicker: StateFlow<Boolean> = _showLanguagePicker.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _searchMatches = MutableStateFlow<List<IntRange>>(emptyList())
+    val searchMatches: StateFlow<List<IntRange>> = _searchMatches.asStateFlow()
+
+    private val _currentMatchIndex = MutableStateFlow(-1)
+    val currentMatchIndex: StateFlow<Int> = _currentMatchIndex.asStateFlow()
+
     private var idealX: Float? = null
     private var selAnchor: Int? = null
 
@@ -83,6 +93,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (range != null) {
                     val current = _textValue.value
                     _textValue.value = current.copy(selection = TextRange(range.first, range.second))
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            settings.collect { s ->
+                ttsWrapper.setLanguage(s.ttsLanguage)
+                if (s.ttsEnginePackage.isNotBlank()) {
+                    ttsWrapper.setEngine(s.ttsEnginePackage)
                 }
             }
         }
@@ -151,6 +170,80 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             settingsRepo.updateVoiceLanguage(language)
             closeLanguagePicker()
+        }
+    }
+
+    fun updateTheme(themeName: String, bgHex: Long, textHex: Long, hlHex: Long) {
+        viewModelScope.launch {
+            settingsRepo.updateTheme(themeName, bgHex, textHex, hlHex)
+        }
+    }
+
+    fun updateHighlightColor(colorHex: Long) {
+        viewModelScope.launch {
+            settingsRepo.updateHighlightColor(colorHex)
+        }
+    }
+
+    fun updateBackgroundColor(colorHex: Long) {
+        viewModelScope.launch {
+            settingsRepo.updateBackgroundColor(colorHex)
+        }
+    }
+
+    fun updateTextColor(colorHex: Long) {
+        viewModelScope.launch {
+            settingsRepo.updateTextColor(colorHex)
+        }
+    }
+
+    fun updateTextSize(sizeSp: Float) {
+        viewModelScope.launch {
+            settingsRepo.updateTextSize(sizeSp)
+        }
+    }
+
+    fun updateTtsLanguage(language: String) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsLanguage(language)
+            ttsWrapper.setLanguage(language)
+        }
+    }
+
+    fun updateTtsEngine(pkg: String) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsEnginePackage(pkg)
+            ttsWrapper.setEngine(pkg)
+        }
+    }
+
+    fun updateButtonSizeMultiplier(multiplier: Float) {
+        viewModelScope.launch {
+            settingsRepo.updateButtonSizeMultiplier(multiplier)
+        }
+    }
+
+    fun updateButtonOrder(order: List<ActionButton>) {
+        viewModelScope.launch {
+            settingsRepo.updateButtonOrder(order)
+        }
+    }
+
+    fun updateElementLayoutOrder(order: List<String>) {
+        viewModelScope.launch {
+            settingsRepo.updateElementLayoutOrder(order)
+        }
+    }
+
+    fun toggleElementVisibility(elementName: String) {
+        viewModelScope.launch {
+            settingsRepo.toggleElementVisibility(elementName)
+        }
+    }
+
+    fun updateArrowSize(size: Float) {
+        viewModelScope.launch {
+            settingsRepo.updateArrowSize(size)
         }
     }
 
@@ -380,16 +473,74 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return ""
     }
 
-    fun updateButtonOrder(order: List<ActionButton>) {
-        viewModelScope.launch {
-            settingsRepo.updateButtonOrder(order)
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+        if (query.isBlank()) {
+            _searchMatches.value = emptyList()
+            _currentMatchIndex.value = -1
+            return
+        }
+
+        val text = _textValue.value.text
+        val matches = mutableListOf<IntRange>()
+        var index = 0
+        while (index < text.length) {
+            val found = text.indexOf(query, startIndex = index, ignoreCase = true)
+            if (found >= 0) {
+                matches.add(found until (found + query.length))
+                index = found + query.length.coerceAtLeast(1)
+            } else {
+                break
+            }
+        }
+        _searchMatches.value = matches
+        if (matches.isNotEmpty()) {
+            val currentPos = _textValue.value.selection.start
+            var closestIdx = matches.indexOfFirst { it.first >= currentPos }
+            if (closestIdx < 0) closestIdx = 0
+            _currentMatchIndex.value = closestIdx
+            highlightAndSpeakMatch(matches[closestIdx])
+        } else {
+            _currentMatchIndex.value = -1
         }
     }
 
-    fun updateArrowSize(size: Float) {
-        viewModelScope.launch {
-            settingsRepo.updateArrowSize(size)
+    fun nextSearchMatch() {
+        val matches = _searchMatches.value
+        if (matches.isEmpty()) return
+        val nextIdx = (_currentMatchIndex.value + 1) % matches.size
+        _currentMatchIndex.value = nextIdx
+        highlightAndSpeakMatch(matches[nextIdx])
+    }
+
+    fun previousSearchMatch() {
+        val matches = _searchMatches.value
+        if (matches.isEmpty()) return
+        val prevIdx = if (_currentMatchIndex.value - 1 < 0) matches.size - 1 else _currentMatchIndex.value - 1
+        _currentMatchIndex.value = prevIdx
+        highlightAndSpeakMatch(matches[prevIdx])
+    }
+
+    private fun highlightAndSpeakMatch(range: IntRange) {
+        val text = _textValue.value.text
+        if (text.isEmpty()) return
+        val start = range.first.coerceIn(0, text.length)
+        val end = (range.last + 1).coerceIn(0, text.length)
+        _textValue.value = _textValue.value.copy(
+            selection = TextRange(start, end),
+            composition = null
+        )
+        val matchedText = text.substring(start, end)
+        if (matchedText.isNotBlank()) {
+            ttsWrapper.play(matchedText, 0)
         }
+    }
+
+    fun clearSearch() {
+        _searchQuery.value = ""
+        _searchMatches.value = emptyList()
+        _currentMatchIndex.value = -1
+        ttsWrapper.stop()
     }
     
     override fun onCleared() {

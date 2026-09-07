@@ -4,18 +4,25 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,7 +47,6 @@ import com.example.data.ActionButton
 import com.example.ui.components.ActionButtonGrid
 import com.example.ui.components.ArrowKeyCluster
 import com.example.ui.components.SelectionHighlightTransformation
-import com.example.ui.components.VoiceMicButton
 import com.example.ui.components.instantClickable
 import kotlinx.coroutines.delay
 import kotlin.math.max
@@ -52,8 +58,6 @@ fun EditorScreen(
     viewModel: EditorViewModel,
     onNavigateToSettings: () -> Unit
 ) {
-    val kActive by viewModel.kActive.collectAsState()
-    val pActive by viewModel.pActive.collectAsState()
     val selActive by viewModel.selActive.collectAsState()
     val kbLockActive by viewModel.kbLockActive.collectAsState()
     val fileName by viewModel.fileName.collectAsState()
@@ -61,10 +65,18 @@ fun EditorScreen(
     val showLanguagePicker by viewModel.showLanguagePicker.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
+    val isPlaying by viewModel.ttsWrapper.isPlaying.collectAsState()
     val transientHighlightRange by viewModel.transientHighlightRange.collectAsState()
 
+    val searchMatches by viewModel.searchMatches.collectAsState()
+    val currentMatchIndex by viewModel.currentMatchIndex.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
+    var showMoreControlsSheet by remember { mutableStateOf(false) }
+    var showSearchBar by remember { mutableStateOf(false) }
     val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -87,88 +99,241 @@ fun EditorScreen(
         if (uri != null) viewModel.saveToUri(uri)
     }
 
-    val defaultOrder = listOf(
-        ActionButton.CUT, ActionButton.COPY, ActionButton.K,
-        ActionButton.P, ActionButton.DELETE, ActionButton.PASTE, ActionButton.ENTER
-    )
-    val actualOrder: List<ActionButton> = remember(settings.buttonOrder) {
-        val parsed = settings.buttonOrder.split(",").mapNotNull { name ->
-            try { ActionButton.valueOf(name.trim()) } catch (_: Exception) { null }
-        }
-        if (parsed.isNotEmpty()) parsed else defaultOrder
+    val editorBgColor = Color(settings.backgroundColorHex)
+    val highlightColor = Color(settings.highlightColorHex)
+    val buttonOrderList = remember(settings.buttonOrder) {
+        settings.buttonOrder.split(",").filter { it.isNotBlank() }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        text = fileName,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFFECEEF2)
-                    )
+                navigationIcon = {
+                    if (showSearchBar) {
+                        IconButton(onClick = {
+                            keyboardController?.hide()
+                            showSearchBar = false
+                            viewModel.clearSearch()
+                        }) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Close Search",
+                                tint = Color(0xFF8FA7D8)
+                            )
+                        }
+                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0C0D10)
-                ),
-                actions = {
-                    com.example.ui.components.ModeToggleButton(
-                        label = "KB Lock",
-                        isActive = kbLockActive,
-                        onClick = viewModel::toggleKbLock,
-                        modifier = Modifier.padding(end = 4.dp)
-                    )
-
-                    IconButton(onClick = { menuExpanded = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = "Menu",
-                            tint = Color(0xFFECEEF2)
+                title = {
+                    if (showSearchBar) {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.updateSearchQuery(it) },
+                            placeholder = { Text("Search in document...", color = Color(0xFF6B7894), fontSize = 14.sp) },
+                            singleLine = true,
+                            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.clearSearch() }) {
+                                        Icon(
+                                            Icons.Default.Close,
+                                            contentDescription = "Clear",
+                                            tint = Color(0xFF8FA7D8),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = fileName,
+                            fontWeight = FontWeight.Normal,
+                            fontSize = 17.sp,
+                            color = Color(0xFFD0D7E5)
                         )
                     }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false },
-                        modifier = Modifier.background(Color(0xFF1B1D22))
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF161A24)
+                ),
+                actions = {
+                    if (showSearchBar) {
+                        if (searchQuery.isNotEmpty()) {
+                            // Match count badge
+                            Surface(
+                                color = Color(0xFF20293D),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.padding(end = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (searchMatches.isNotEmpty()) "${currentMatchIndex + 1}/${searchMatches.size}" else "0/0",
+                                    color = if (searchMatches.isNotEmpty()) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+
+                            // Previous Match
+                            IconButton(
+                                onClick = { viewModel.previousSearchMatch() },
+                                enabled = searchMatches.isNotEmpty()
+                            ) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowUp,
+                                    contentDescription = "Previous Result",
+                                    tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
+                                )
+                            }
+
+                            // Next Match
+                            IconButton(
+                                onClick = { viewModel.nextSearchMatch() },
+                                enabled = searchMatches.isNotEmpty()
+                            ) {
+                                Icon(
+                                    Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Next Result",
+                                    tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
+                                )
+                            }
+                        }
+                    } else {
+                        IconButton(onClick = {
+                            showSearchBar = true
+                            if (searchQuery.isNotEmpty()) {
+                                viewModel.updateSearchQuery(searchQuery)
+                            }
+                        }) {
+                            Icon(
+                                Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = Color(0xFF8FA7D8)
+                            )
+                        }
+
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "Menu",
+                                tint = Color(0xFF8FA7D8)
+                            )
+                        }
+                    }
+                    MaterialTheme(
+                        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(14.dp))
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("New", color = Color(0xFFECEEF2)) },
-                            onClick = {
-                                menuExpanded = false
-                                viewModel.newFile()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Open...", color = Color(0xFFECEEF2)) },
-                            onClick = {
-                                menuExpanded = false
-                                openDocumentLauncher.launch(arrayOf("text/*"))
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Save", color = Color(0xFFECEEF2)) },
-                            onClick = {
-                                menuExpanded = false
-                                viewModel.saveCurrentFile(onRequireSaveAs = {
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier
+                                .width(230.dp)
+                                .background(Color(0xFF161E30))
+                                .border(1.dp, Color(0xFF26344E), RoundedCornerShape(14.dp))
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("New File", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.AddCircleOutline,
+                                        contentDescription = "New",
+                                        tint = Color(0xFF56D0DE),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.newFile()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Open...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.FolderOpen,
+                                        contentDescription = "Open",
+                                        tint = Color(0xFFFFC700),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    openDocumentLauncher.launch(arrayOf("text/*"))
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Save", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Save,
+                                        contentDescription = "Save",
+                                        tint = Color(0xFF32D796),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.saveCurrentFile(onRequireSaveAs = {
+                                        createDocumentLauncher.launch(fileName)
+                                    })
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Save As...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.DriveFolderUpload,
+                                        contentDescription = "Save As",
+                                        tint = Color(0xFF8FA7D8),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
                                     createDocumentLauncher.launch(fileName)
-                                })
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Save As", color = Color(0xFFECEEF2)) },
-                            onClick = {
-                                menuExpanded = false
-                                createDocumentLauncher.launch(fileName)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings", color = Color(0xFFECEEF2)) },
-                            onClick = {
-                                menuExpanded = false
-                                onNavigateToSettings()
-                            }
-                        )
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF243048), modifier = Modifier.padding(vertical = 4.dp))
+
+                            DropdownMenuItem(
+                                text = { Text("Extra Controls (K, P, Lock)", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Controls",
+                                        tint = Color(0xFF60A5FA),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showMoreControlsSheet = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Settings", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "Settings",
+                                        tint = Color(0xFFA78BFA),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onNavigateToSettings()
+                                }
+                            )
+                        }
                     }
                 }
             )
@@ -177,92 +342,80 @@ fun EditorScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF0C0D10))
+                .background(editorBgColor)
                 .padding(padding)
         ) {
-            EditorTextArea(
-                viewModel = viewModel,
-                kbLockActive = kbLockActive,
-                transientHighlightRange = transientHighlightRange,
-                onTextLayout = { layoutResult.value = it },
+            // Main Text Canvas with Floating READ and MIC buttons
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black)
-                    .border(1.dp, Color(0xFF202228), RoundedCornerShape(10.dp))
-                    .padding(14.dp)
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF1B1D22))
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Bottom
+                    .background(editorBgColor)
             ) {
-                ActionButtonGrid(
-                    buttonOrder = actualOrder,
-                    kActive = kActive,
-                    pActive = pActive,
-                    onActionClick = viewModel::onAction,
-                    modifier = Modifier.weight(1f)
+                EditorTextArea(
+                    viewModel = viewModel,
+                    kbLockActive = kbLockActive,
+                    transientHighlightRange = transientHighlightRange,
+                    onTextLayout = { layoutResult.value = it },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 )
 
+                // Floating Action Bar on bottom-right of editor canvas
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        val isPlaying by viewModel.ttsWrapper.isPlaying.collectAsState()
-                        com.example.ui.components.PlayButton(
-                            isPlaying = isPlaying,
-                            onClick = viewModel::togglePlay
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "Play",
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF9AA0AC)
-                        )
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        VoiceMicButton(
-                            isListening = isListening,
-                            onClick = {
-                                val hasPermission = ContextCompat.checkSelfPermission(
-                                    context, Manifest.permission.RECORD_AUDIO
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (hasPermission) {
-                                    viewModel.onMicClicked()
-                                } else {
-                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                }
-                            },
-                            onLongClick = viewModel::openLanguagePicker
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = settings.voiceLanguage,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF9AA0AC)
-                        )
-                    }
-                }
+                    // READ Button (Dark container with play/speaker icon + "READ" label)
+                    FloatingReadButton(
+                        isPlaying = isPlaying,
+                        onClick = viewModel::togglePlay
+                    )
 
+                    // MIC Button (Bright Cyan pill with black mic icon)
+                    FloatingMicButton(
+                        isListening = isListening,
+                        onClick = {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                viewModel.onMicClicked()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
+                        onLongClick = viewModel::openLanguagePicker
+                    )
+                }
+            }
+
+            // Bottom Keypad / Control Area
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0A0E18))
+                    .padding(horizontal = 10.dp, vertical = 10.dp)
+            ) {
                 Row(
-                    modifier = Modifier.weight(1f),
-                    horizontalArrangement = Arrangement.End
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    val baseSize = 42.dp * settings.arrowSize
+                    // Left Side: 2x3 Grid (Customizable buttons)
+                    ActionButtonGrid(
+                        onActionClick = viewModel::onAction,
+                        onMoreClick = { showMoreControlsSheet = true },
+                        buttonOrder = buttonOrderList,
+                        sizeMultiplier = settings.buttonSizeMultiplier,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    // Right Side: D-Pad Directional Cluster
                     ArrowKeyCluster(
                         selActive = selActive,
                         scale = settings.arrowSize,
@@ -270,53 +423,21 @@ fun EditorScreen(
                         onMoveDown = { viewModel.moveDown(layoutResult.value) },
                         onMoveLeft = viewModel::moveLeft,
                         onMoveRight = viewModel::moveRight,
-                        onToggleSel = viewModel::toggleSel
+                        onToggleSel = viewModel::toggleSel,
+                        activeHighlightColor = highlightColor,
+                        modifier = Modifier.wrapContentWidth()
                     )
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier
-                            .padding(start = 6.dp)
-                            .width(baseSize * 0.8f)
-                            .height(baseSize * 3 + 10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(Color(0xFF242730))
-                                .instantClickable(onClick = { viewModel.jumpStart() }),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Top",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 9.5.sp,
-                                color = Color(0xFF9AA0AC),
-                                letterSpacing = 0.3.sp
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(Color(0xFF242730))
-                                .instantClickable(onClick = { viewModel.jumpEnd() }),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Bottom",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 9.5.sp,
-                                color = Color(0xFF9AA0AC),
-                                letterSpacing = 0.3.sp
-                            )
-                        }
-                    }
                 }
             }
         }
+    }
+
+    if (showMoreControlsSheet) {
+        MoreControlsSheet(
+            viewModel = viewModel,
+            onNavigateToSettings = onNavigateToSettings,
+            onDismiss = { showMoreControlsSheet = false }
+        )
     }
 
     if (showReplacePopup) {
@@ -329,6 +450,76 @@ fun EditorScreen(
 }
 
 @Composable
+fun FloatingReadButton(
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (isPlaying) Color(0xFF2563EB) else Color(0xFF161E30)
+    val contentColor = Color(0xFF8FA7D8)
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(bgColor)
+            .border(1.dp, Color(0xFF26324A), RoundedCornerShape(12.dp))
+            .instantClickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.PlayArrow,
+                contentDescription = "Read",
+                tint = if (isPlaying) Color.White else contentColor,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = "READ",
+                color = if (isPlaying) Color.White else contentColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 8.sp,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun FloatingMicButton(
+    isListening: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (isListening) Color(0xFFFF4B6E) else Color(0xFF56D0DE)
+
+    Box(
+        modifier = modifier
+            .size(46.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(bgColor)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Mic,
+            contentDescription = "Microphone",
+            tint = Color.Black,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+@Composable
 fun EditorTextArea(
     viewModel: EditorViewModel,
     kbLockActive: Boolean,
@@ -337,8 +528,14 @@ fun EditorTextArea(
     modifier: Modifier = Modifier
 ) {
     val textValue by viewModel.textValue.collectAsState()
+    val settings by viewModel.settings.collectAsState()
     var localLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val focusRequester = remember { FocusRequester() }
+
+    val textColor = Color(settings.textColorHex)
+    val highlightColor = Color(settings.highlightColorHex)
+    val textSize = settings.textSizeSp.sp
+    val lineHeight = (settings.textSizeSp * 1.45f).sp
 
     val cursorAlpha = remember { Animatable(1f) }
     LaunchedEffect(textValue.selection, textValue.text) {
@@ -351,18 +548,19 @@ fun EditorTextArea(
         }
     }
 
-    LaunchedEffect(Unit) {
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(kbLockActive) {
+        if (kbLockActive) {
+            keyboardController?.hide()
+        }
     }
 
     Box(modifier = modifier) {
-        val brightYellowSelection = TextSelectionColors(
-            handleColor = Color(0xFFFFD600),
-            backgroundColor = Color(0xFFFFD600).copy(alpha = 0.55f)
+        val brightSelectionColors = TextSelectionColors(
+            handleColor = highlightColor,
+            backgroundColor = highlightColor.copy(alpha = 0.55f)
         )
-        CompositionLocalProvider(LocalTextSelectionColors provides brightYellowSelection) {
+        CompositionLocalProvider(LocalTextSelectionColors provides brightSelectionColors) {
             BasicTextField(
                 value = textValue,
                 onValueChange = viewModel::onTextChanged,
@@ -371,15 +569,15 @@ fun EditorTextArea(
                     .focusRequester(focusRequester),
                 readOnly = kbLockActive,
                 textStyle = TextStyle(
-                    color = Color(0xFFECEEF2),
-                    fontSize = 17.sp,
-                    lineHeight = 25.5.sp
+                    color = textColor,
+                    fontSize = textSize,
+                    lineHeight = lineHeight
                 ),
-                visualTransformation = remember(textValue.selection, transientHighlightRange) {
+                visualTransformation = remember(textValue.selection, transientHighlightRange, highlightColor) {
                     SelectionHighlightTransformation(
                         selection = textValue.selection,
                         transientHighlight = transientHighlightRange,
-                        highlightColor = Color(0xFFFFD600).copy(alpha = 0.55f)
+                        highlightColor = highlightColor.copy(alpha = 0.55f)
                     )
                 },
                 cursorBrush = SolidColor(Color.Transparent),
@@ -392,9 +590,9 @@ fun EditorTextArea(
 
         if (textValue.text.isEmpty()) {
             Text(
-                "Type something here",
-                color = Color(0xFF5A5D66),
-                fontSize = 17.sp,
+                "Type Something Here",
+                color = textColor.copy(alpha = 0.4f),
+                fontSize = textSize,
                 modifier = Modifier.padding(top = 1.dp)
             )
         }
@@ -427,7 +625,7 @@ fun EditorTextArea(
                             val bottom = layout.getLineBottom(lineIdx)
                             val h = bottom - top
                             drawRoundRect(
-                                color = Color(0xFFFFD600).copy(alpha = 0.65f),
+                                color = highlightColor.copy(alpha = 0.65f),
                                 topLeft = Offset(0f, top + 2.dp.toPx()),
                                 size = Size(36.dp.toPx(), (h - 4.dp.toPx()).coerceAtLeast(14.dp.toPx())),
                                 cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
@@ -440,7 +638,7 @@ fun EditorTextArea(
                 val caret = textValue.selection.end.coerceIn(0, textValue.text.length)
                 val rect = layout.getCursorRect(caret)
                 drawRoundRect(
-                    color = Color(0xFF6C8CFF).copy(alpha = cursorAlpha.value),
+                    color = highlightColor.copy(alpha = cursorAlpha.value),
                     topLeft = Offset(rect.left, rect.top),
                     size = Size(2.5.dp.toPx(), rect.height),
                     cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())

@@ -7,14 +7,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -24,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,16 +41,14 @@ import com.example.logic.CursorLogic
 import com.example.ui.components.ActionButtonGrid
 import com.example.ui.components.ArrowKeyCluster
 import com.example.ui.components.SelectionHighlightTransformation
-import com.example.ui.components.VoiceMicButton
 import kotlinx.coroutines.delay
-import kotlin.math.max
-import kotlin.math.min
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReplacePopup(viewModel: EditorViewModel) {
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
     val finalResult by viewModel.speechWrapper.finalResult.collectAsState()
+    val settings by viewModel.settings.collectAsState()
 
     var previewText by remember { mutableStateOf(TextFieldValue("")) }
     var transientHighlight by remember { mutableStateOf<TextRange?>(null) }
@@ -66,6 +71,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
     var selAnchor by remember { mutableStateOf<Int?>(null) }
     var idealX by remember { mutableStateOf<Float?>(null) }
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    var showPopupMoreSheet by remember { mutableStateOf(false) }
 
     val cursorAlpha = remember { Animatable(1f) }
     LaunchedEffect(previewText.selection, previewText.text) {
@@ -78,7 +84,6 @@ fun ReplacePopup(viewModel: EditorViewModel) {
         }
     }
 
-    val settings by viewModel.settings.collectAsState()
     val context = LocalContext.current
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -87,6 +92,11 @@ fun ReplacePopup(viewModel: EditorViewModel) {
             if (isListening) viewModel.speechWrapper.stopListening()
             else viewModel.speechWrapper.startListening(settings.voiceLanguage)
         }
+    }
+
+    val highlightColor = Color(settings.highlightColorHex)
+    val buttonOrderList = remember(settings.buttonOrder) {
+        settings.buttonOrder.split(",").filter { it.isNotBlank() }
     }
 
     fun handleArrow(direction: ArrowDirection) {
@@ -108,36 +118,54 @@ fun ReplacePopup(viewModel: EditorViewModel) {
 
     ModalBottomSheet(
         onDismissRequest = { viewModel.closeReplacePopup() },
-        modifier = Modifier.fillMaxHeight(0.9f)
+        containerColor = Color(0xFF141926),
+        modifier = Modifier.fillMaxHeight(0.92f)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Text("Replace Text", style = MaterialTheme.typography.titleLarge)
-            Text(
-                "Speak or type to create replacement text.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Replace Selection",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFECEFF8)
+                )
+                IconButton(onClick = { viewModel.closeReplacePopup() }) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF8FA7D8))
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black)
+                    .border(1.dp, Color(0xFF242E44), RoundedCornerShape(10.dp))
+                    .padding(12.dp)
             ) {
                 if (previewText.text.isEmpty()) {
-                    Text("Preview text...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Text(
+                        "Type or speak replacement...",
+                        color = Color(0xFF6B7280),
+                        fontSize = 17.sp
+                    )
                 }
 
-                val brightYellowSelection = TextSelectionColors(
-                    handleColor = Color(0xFFFFD600),
-                    backgroundColor = Color(0xFFFFD600).copy(alpha = 0.55f)
+                val brightSelection = TextSelectionColors(
+                    handleColor = highlightColor,
+                    backgroundColor = highlightColor.copy(alpha = 0.55f)
                 )
-                CompositionLocalProvider(LocalTextSelectionColors provides brightYellowSelection) {
+                CompositionLocalProvider(LocalTextSelectionColors provides brightSelection) {
                     BasicTextField(
                         value = previewText,
                         onValueChange = { 
@@ -149,14 +177,15 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                         },
                         modifier = Modifier.fillMaxSize(),
                         textStyle = TextStyle(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontSize = 18.sp
+                            color = Color(0xFFECEEF2),
+                            fontSize = 17.sp,
+                            lineHeight = 25.sp
                         ),
-                        visualTransformation = remember(previewText.selection, transientHighlight) {
+                        visualTransformation = remember(previewText.selection, transientHighlight, highlightColor) {
                             SelectionHighlightTransformation(
                                 selection = previewText.selection,
                                 transientHighlight = transientHighlight,
-                                highlightColor = Color(0xFFFFD600).copy(alpha = 0.55f)
+                                highlightColor = highlightColor.copy(alpha = 0.55f)
                             )
                         },
                         cursorBrush = SolidColor(Color.Transparent),
@@ -170,7 +199,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                         val caret = previewText.selection.end.coerceIn(0, previewText.text.length)
                         val rect = layout.getCursorRect(caret)
                         drawRoundRect(
-                            color = Color(0xFF6C8CFF).copy(alpha = cursorAlpha.value),
+                            color = highlightColor.copy(alpha = cursorAlpha.value),
                             topLeft = Offset(rect.left, rect.top),
                             size = Size(2.5.dp.toPx(), rect.height),
                             cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
@@ -179,43 +208,35 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
+            // Control keypad in popup
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.Bottom
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 ActionButtonGrid(
-                    buttonOrder = listOf(
-                        ActionButton.CUT, ActionButton.COPY, ActionButton.K,
-                        ActionButton.P, ActionButton.DELETE, ActionButton.PASTE, ActionButton.ENTER
-                    ),
-                    kActive = kActive,
-                    pActive = pActive,
                     onActionClick = { action ->
-                        when(action) {
-                            ActionButton.K -> kActive = !kActive
-                            ActionButton.P -> pActive = !pActive
-                            else -> {
-                                val clipboardText = if (action == ActionButton.PASTE) viewModel.pasteFromClipboard() else null
-                                previewText = com.example.logic.TextActionLogic.handleAction(
-                                    action = action,
-                                    currentValue = previewText,
-                                    clipboardText = clipboardText,
-                                    onCopy = { viewModel.copyToClipboard(it) }
-                                )
-                                selActive = false
-                                selAnchor = null
-                                idealX = null
-                                transientHighlight = null
-                            }
-                        }
+                        val clipboardText = if (action == ActionButton.PASTE) viewModel.pasteFromClipboard() else null
+                        previewText = com.example.logic.TextActionLogic.handleAction(
+                            action = action,
+                            currentValue = previewText,
+                            clipboardText = clipboardText,
+                            onCopy = { viewModel.copyToClipboard(it) }
+                        )
+                        selActive = false
+                        selAnchor = null
+                        idealX = null
+                        transientHighlight = null
                     },
+                    onMoreClick = { showPopupMoreSheet = true },
+                    buttonOrder = buttonOrderList,
+                    sizeMultiplier = settings.buttonSizeMultiplier,
                     modifier = Modifier.weight(1f)
                 )
 
-                VoiceMicButton(
+                FloatingMicButton(
                     isListening = isListening,
                     onClick = {
                         val hasPermission = ContextCompat.checkSelfPermission(
@@ -228,13 +249,12 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
-                    onLongClick = {},
-                    modifier = Modifier.padding(horizontal = 16.dp)
+                    onLongClick = {}
                 )
 
                 ArrowKeyCluster(
                     selActive = selActive,
-                    scale = settings.arrowSize,
+                    scale = settings.arrowSize * 0.85f,
                     onMoveUp = { handleArrow(ArrowDirection.UP) },
                     onMoveDown = { handleArrow(ArrowDirection.DOWN) },
                     onMoveLeft = { handleArrow(ArrowDirection.LEFT) },
@@ -252,23 +272,28 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                             transientHighlight = null
                         }
                     },
-                    modifier = Modifier.weight(1f)
+                    activeHighlightColor = highlightColor,
+                    modifier = Modifier.wrapContentWidth()
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(onClick = { viewModel.closeReplacePopup() }) {
+                TextButton(
+                    onClick = { viewModel.closeReplacePopup() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFF8FA7D8))
+                ) {
                     Text("Cancel")
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
                     onClick = { viewModel.applyReplace(previewText.text) },
-                    enabled = previewText.text.isNotEmpty()
+                    enabled = previewText.text.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
                 ) {
                     Text("Apply")
                 }

@@ -16,7 +16,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.EditorViewModel
-import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.GeneralSettingsScreen
+import com.example.ui.screens.LayoutSettingsScreen
+import com.example.ui.screens.SettingsCategoriesScreen
+import com.example.ui.screens.SpeechSettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -59,7 +62,27 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(
+                    SettingsCategoriesScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigateToGeneral = { navController.navigate("settings/general") },
+                        onNavigateToSpeech = { navController.navigate("settings/speech") },
+                        onNavigateToLayout = { navController.navigate("settings/layout") }
+                    )
+                }
+                composable("settings/general") {
+                    GeneralSettingsScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+                composable("settings/speech") {
+                    SpeechSettingsScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        viewModel = viewModel
+                    )
+                }
+                composable("settings/layout") {
+                    LayoutSettingsScreen(
                         onNavigateBack = { navController.popBackStack() },
                         viewModel = viewModel
                     )

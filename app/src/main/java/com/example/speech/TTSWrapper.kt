@@ -25,10 +25,34 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     private var pendingStartOffset = 0
     private val appContext = context.applicationContext
 
+    private var currentLanguageTag: String = "en-US"
+    private var currentEnginePkg: String? = null
+
+    init {
+        // Initialize immediately to be ready
+        initializeTTS()
+    }
+
+    private fun initializeTTS(enginePkg: String? = null) {
+        try {
+            isInitializing = true
+            currentEnginePkg = enginePkg
+            if (enginePkg.isNullOrBlank()) {
+                tts = TextToSpeech(appContext, this)
+            } else {
+                tts = TextToSpeech(appContext, this, enginePkg)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            isInitializing = false
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             isInitialized = true
-            tts?.language = Locale.US
+            isInitializing = false
+            applyLanguage(currentLanguageTag)
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     _isPlaying.value = true
@@ -58,17 +82,60 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
+    fun setLanguage(languageTag: String) {
+        currentLanguageTag = languageTag
+        if (isInitialized) {
+            applyLanguage(languageTag)
+        }
+    }
+
+    private fun applyLanguage(tag: String) {
+        try {
+            val locale = Locale.forLanguageTag(tag)
+            tts?.language = locale
+        } catch (e: Exception) {
+            try {
+                tts?.language = Locale.US
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun setEngine(enginePkg: String) {
+        if (currentEnginePkg != enginePkg) {
+            shutdown()
+            initializeTTS(enginePkg.ifBlank { null })
+        }
+    }
+
+    fun getAvailableEngines(): List<TextToSpeech.EngineInfo> {
+        return try {
+            tts?.engines ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getAvailableVoicesOrLocales(): List<Locale> {
+        return try {
+            if (isInitialized && tts != null) {
+                tts?.availableLanguages?.toList() ?: listOf(Locale.US, Locale.UK, Locale.CANADA, Locale.FRENCH, Locale.GERMAN, Locale.ITALIAN, Locale.JAPANESE, Locale.CHINESE, Locale("es", "ES"), Locale("hi", "IN"))
+            } else {
+                listOf(Locale.US, Locale.UK, Locale.CANADA, Locale.FRENCH, Locale.GERMAN, Locale.ITALIAN, Locale.JAPANESE, Locale.CHINESE, Locale("es", "ES"), Locale("hi", "IN"))
+            }
+        } catch (e: Exception) {
+            listOf(Locale.US, Locale.UK, Locale.FRENCH, Locale.GERMAN, Locale.ITALIAN, Locale.JAPANESE, Locale.CHINESE, Locale("es", "ES"))
+        }
+    }
+
     fun play(text: String, startOffset: Int = 0) {
-        if (tts == null) {
+        if (tts == null || !isInitialized) {
             pendingText = text
             pendingStartOffset = startOffset
             if (!isInitializing) {
-                isInitializing = true
-                tts = TextToSpeech(appContext, this)
+                initializeTTS(currentEnginePkg)
             }
             return
         }
-        if (!isInitialized) return
         val textToRead = text.substring(startOffset)
         if (textToRead.isBlank()) return
         
@@ -78,13 +145,20 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun stop() {
-        tts?.stop()
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
         _isPlaying.value = false
         _currentRange.value = null
     }
 
     fun shutdown() {
-        tts?.stop()
-        tts?.shutdown()
+        try {
+            tts?.stop()
+            tts?.shutdown()
+        } catch (_: Exception) {}
+        tts = null
+        isInitialized = false
+        isInitializing = false
     }
 }
