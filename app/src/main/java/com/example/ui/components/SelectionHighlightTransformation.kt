@@ -14,7 +14,8 @@ import kotlin.math.min
 class SelectionHighlightTransformation(
     private val selection: TextRange,
     private val transientHighlight: TextRange? = null,
-    private val highlightColor: Color = Color(0xFFFFD600).copy(alpha = 0.55f)
+    private val highlightColor: Color = Color(0xFFFFD600).copy(alpha = 0.55f),
+    private val highlightedTextColor: Color = Color.White
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val effectiveRange = if (selection.length > 0) {
@@ -41,7 +42,7 @@ class SelectionHighlightTransformation(
             addStyle(
                 SpanStyle(
                     background = highlightColor,
-                    color = if (isLightColor(highlightColor)) Color.Black else Color.White
+                    color = highlightedTextColor
                 ),
                 start,
                 end
@@ -49,13 +50,5 @@ class SelectionHighlightTransformation(
         }
         
         return TransformedText(annotated, OffsetMapping.Identity)
-    }
-
-    private fun isLightColor(color: Color): Boolean {
-        val r = color.red
-        val g = color.green
-        val b = color.blue
-        val luminance = 0.299 * r + 0.587 * g + 0.114 * b
-        return luminance > 0.5
     }
 }

@@ -1,9 +1,8 @@
 package com.example.ui.components
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -17,12 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VoiceMicButton(
     isListening: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val bgColor = if (isListening) MaterialTheme.colorScheme.error else Color(0xFF24262C)
@@ -35,10 +32,7 @@ fun VoiceMicButton(
             .clip(CircleShape)
             .background(bgColor)
             .border(1.dp, borderColor, CircleShape)
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            ),
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(

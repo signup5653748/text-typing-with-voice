@@ -1,5 +1,7 @@
 package com.example
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -23,73 +25,88 @@ import com.example.ui.screens.SpeechSettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    enableEdgeToEdge()
-    setContent {
-      MyApplicationTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            val navController = rememberNavController()
-            val viewModel: EditorViewModel = viewModel()
-            
-            LaunchedEffect(Unit) {
-                val currentIntent = intent
-                if (currentIntent?.action == android.content.Intent.ACTION_VIEW || currentIntent?.action == android.content.Intent.ACTION_EDIT) {
-                    currentIntent.data?.let { viewModel.loadFromUri(it) }
-                }
-            }
-            
-            DisposableEffect(Unit) {
-                val listener = androidx.core.util.Consumer<android.content.Intent> { newIntent ->
-                    if (newIntent.action == android.content.Intent.ACTION_VIEW || newIntent.action == android.content.Intent.ACTION_EDIT) {
-                        newIntent.data?.let { viewModel.loadFromUri(it) }
-                    }
-                }
-                addOnNewIntentListener(listener)
-                onDispose {
-                    removeOnNewIntentListener(listener)
-                }
-            }
 
-            NavHost(navController = navController, startDestination = "editor") {
-                composable("editor") {
-                    EditorScreen(
-                        onNavigateToSettings = { navController.navigate("settings") },
-                        viewModel = viewModel
-                    )
-                }
-                composable("settings") {
-                    SettingsCategoriesScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                        onNavigateToGeneral = { navController.navigate("settings/general") },
-                        onNavigateToSpeech = { navController.navigate("settings/speech") },
-                        onNavigateToLayout = { navController.navigate("settings/layout") }
-                    )
-                }
-                composable("settings/general") {
-                    GeneralSettingsScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                        viewModel = viewModel
-                    )
-                }
-                composable("settings/speech") {
-                    SpeechSettingsScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                        viewModel = viewModel
-                    )
-                }
-                composable("settings/layout") {
-                    LayoutSettingsScreen(
-                        onNavigateBack = { navController.popBackStack() },
-                        viewModel = viewModel
-                    )
+    private var handledUri: Uri? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            MyApplicationTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    val navController = rememberNavController()
+                    val viewModel: EditorViewModel = viewModel()
+                    
+                    LaunchedEffect(Unit) {
+                        processIntent(intent, viewModel)
+                    }
+                    
+                    DisposableEffect(Unit) {
+                        val listener = androidx.core.util.Consumer<Intent> { newIntent ->
+                            processIntent(newIntent, viewModel)
+                        }
+                        addOnNewIntentListener(listener)
+                        onDispose {
+                            removeOnNewIntentListener(listener)
+                        }
+                    }
+
+                    NavHost(navController = navController, startDestination = "editor") {
+                        composable("editor") {
+                            EditorScreen(
+                                onNavigateToSettings = { navController.navigate("settings") },
+                                viewModel = viewModel
+                            )
+                        }
+                        composable("settings") {
+                            SettingsCategoriesScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onNavigateToGeneral = { navController.navigate("settings/general") },
+                                onNavigateToSpeech = { navController.navigate("settings/speech") },
+                                onNavigateToLayout = { navController.navigate("settings/layout") }
+                            )
+                        }
+                        composable("settings/general") {
+                            GeneralSettingsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                viewModel = viewModel
+                            )
+                        }
+                        composable("settings/speech") {
+                            SpeechSettingsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                viewModel = viewModel
+                            )
+                        }
+                        composable("settings/layout") {
+                            LayoutSettingsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                viewModel = viewModel
+                            )
+                        }
+                    }
                 }
             }
         }
-      }
     }
-  }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
+
+    private fun processIntent(intent: Intent?, viewModel: EditorViewModel) {
+        if (intent == null) return
+        val action = intent.action
+        if (action == Intent.ACTION_VIEW || action == Intent.ACTION_EDIT) {
+            val uri = intent.data
+            if (uri != null && uri != handledUri) {
+                handledUri = uri
+                viewModel.loadFromUri(uri)
+            }
+        }
+    }
 }

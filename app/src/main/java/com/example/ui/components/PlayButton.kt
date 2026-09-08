@@ -1,8 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -39,11 +40,12 @@ val StopIcon: ImageVector
         }
     }.build()
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-
 fun PlayButton(
     isPlaying: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val bgColor = if (isPlaying) MaterialTheme.colorScheme.primary else Color(0xFF24262C)
@@ -56,7 +58,10 @@ fun PlayButton(
             .clip(CircleShape)
             .background(bgColor)
             .border(1.dp, borderColor, CircleShape)
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         contentAlignment = Alignment.Center
     ) {
         Icon(

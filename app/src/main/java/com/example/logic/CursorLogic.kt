@@ -47,10 +47,11 @@ object CursorLogic {
                     target
                 } else {
                     val target = findPreviousWordBoundary(text, currentCaret)
+                    val finalTarget = if (target >= currentCaret && currentCaret > 0) 0 else target
                     if (!isSelActive && text.isNotEmpty()) {
-                        transientRange = getWordRangeAt(text, target)
+                        transientRange = getWordRangeAt(text, finalTarget)
                     }
-                    target
+                    finalTarget
                 }
             }
             ArrowDirection.RIGHT -> {
@@ -64,27 +65,46 @@ object CursorLogic {
                     target
                 } else {
                     val target = findNextWordBoundary(text, currentCaret)
+                    val finalTarget = if (target <= currentCaret && currentCaret < text.length) text.length else target
                     if (!isSelActive && text.isNotEmpty()) {
-                        transientRange = getWordRangeAt(text, if (target > 0) target - 1 else 0)
+                        transientRange = getWordRangeAt(text, if (finalTarget > 0) finalTarget - 1 else 0)
                     }
-                    target
+                    finalTarget
                 }
             }
             ArrowDirection.UP -> {
                 if (isParagraphMode) {
                     newIdealX = null
                     val target = findPreviousParagraphStart(text, currentCaret)
+                    val finalTarget = if (target >= currentCaret && currentCaret > 0) 0 else target
                     if (!isSelActive && text.isNotEmpty()) {
-                        transientRange = getParagraphRangeAt(text, target)
+                        transientRange = getParagraphRangeAt(text, finalTarget)
                     }
-                    target
+                    finalTarget
                 } else if (layoutResult != null && layoutResult.lineCount > 0) {
-                    val currentLine = layoutResult.getLineForOffset(currentCaret)
+                    val currentLine = layoutResult.getLineForOffset(currentCaret.coerceIn(0, text.length))
                     val prevLine = (currentLine - 1).coerceAtLeast(0)
-                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret, true)
+                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
                     newIdealX = x
-                    val lineTop = layoutResult.getLineTop(prevLine)
-                    val target = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+
+                    val target = if (currentLine <= 0) {
+                        0
+                    } else {
+                        val lineTop = layoutResult.getLineTop(prevLine)
+                        val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+                        if (calculatedTarget >= currentCaret) {
+                            val prevLineEnd = layoutResult.getLineEnd(prevLine)
+                            if (prevLineEnd < currentCaret) {
+                                prevLineEnd
+                            } else if (prevLine == 0) {
+                                0
+                            } else {
+                                (currentCaret - 1).coerceAtLeast(0)
+                            }
+                        } else {
+                            calculatedTarget
+                        }
+                    }
                     if (!isSelActive) {
                         transientRange = getLineRange(text, layoutResult, prevLine)
                     }
@@ -92,27 +112,46 @@ object CursorLogic {
                 } else {
                     newIdealX = null
                     val target = findPreviousLineOffset(text, currentCaret)
+                    val finalTarget = if (target >= currentCaret && currentCaret > 0) 0 else target
                     if (!isSelActive) {
-                        transientRange = getFallbackLineRange(text, target)
+                        transientRange = getFallbackLineRange(text, finalTarget)
                     }
-                    target
+                    finalTarget
                 }
             }
             ArrowDirection.DOWN -> {
                 if (isParagraphMode) {
                     newIdealX = null
                     val target = findNextParagraphStart(text, currentCaret)
+                    val finalTarget = if (target <= currentCaret && currentCaret < text.length) text.length else target
                     if (!isSelActive && text.isNotEmpty()) {
-                        transientRange = getParagraphRangeAt(text, target)
+                        transientRange = getParagraphRangeAt(text, finalTarget)
                     }
-                    target
+                    finalTarget
                 } else if (layoutResult != null && layoutResult.lineCount > 0) {
-                    val currentLine = layoutResult.getLineForOffset(currentCaret)
+                    val currentLine = layoutResult.getLineForOffset(currentCaret.coerceIn(0, text.length))
                     val nextLine = (currentLine + 1).coerceAtMost(layoutResult.lineCount - 1)
-                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret, true)
+                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
                     newIdealX = x
-                    val lineTop = layoutResult.getLineTop(nextLine)
-                    val target = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+
+                    val target = if (currentLine >= layoutResult.lineCount - 1) {
+                        text.length
+                    } else {
+                        val lineTop = layoutResult.getLineTop(nextLine)
+                        val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+                        if (calculatedTarget <= currentCaret) {
+                            val nextLineStart = layoutResult.getLineStart(nextLine)
+                            if (nextLineStart > currentCaret) {
+                                nextLineStart
+                            } else if (nextLine == layoutResult.lineCount - 1) {
+                                text.length
+                            } else {
+                                (currentCaret + 1).coerceAtMost(text.length)
+                            }
+                        } else {
+                            calculatedTarget
+                        }
+                    }
                     if (!isSelActive) {
                         transientRange = getLineRange(text, layoutResult, nextLine)
                     }
@@ -120,10 +159,11 @@ object CursorLogic {
                 } else {
                     newIdealX = null
                     val target = findNextLineOffset(text, currentCaret)
+                    val finalTarget = if (target <= currentCaret && currentCaret < text.length) text.length else target
                     if (!isSelActive) {
-                        transientRange = getFallbackLineRange(text, target)
+                        transientRange = getFallbackLineRange(text, finalTarget)
                     }
-                    target
+                    finalTarget
                 }
             }
         }.coerceIn(0, text.length)

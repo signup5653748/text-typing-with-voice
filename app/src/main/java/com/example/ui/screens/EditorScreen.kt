@@ -63,6 +63,7 @@ fun EditorScreen(
     val fileName by viewModel.fileName.collectAsState()
     val showReplacePopup by viewModel.showReplacePopup.collectAsState()
     val showLanguagePicker by viewModel.showLanguagePicker.collectAsState()
+    val showSaveDialog by viewModel.showSaveDialog.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
     val isPlaying by viewModel.ttsWrapper.isPlaying.collectAsState()
@@ -97,6 +98,24 @@ fun EditorScreen(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
         if (uri != null) viewModel.saveToUri(uri)
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = showSearchBar || showReplacePopup || showMoreControlsSheet || showLanguagePicker || menuExpanded
+    ) {
+        if (menuExpanded) {
+            menuExpanded = false
+        } else if (showSearchBar) {
+            keyboardController?.hide()
+            showSearchBar = false
+            viewModel.clearSearch()
+        } else if (showReplacePopup) {
+            viewModel.closeReplacePopup()
+        } else if (showMoreControlsSheet) {
+            showMoreControlsSheet = false
+        } else if (showLanguagePicker) {
+            viewModel.closeLanguagePicker()
+        }
     }
 
     val editorBgColor = Color(settings.backgroundColorHex)
@@ -280,9 +299,7 @@ fun EditorScreen(
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    viewModel.saveCurrentFile(onRequireSaveAs = {
-                                        createDocumentLauncher.launch(fileName)
-                                    })
+                                    viewModel.saveCurrentFile()
                                 }
                             )
                             DropdownMenuItem(
@@ -297,7 +314,7 @@ fun EditorScreen(
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    createDocumentLauncher.launch(fileName)
+                                    viewModel.openSaveDialog(isSaveAs = true)
                                 }
                             )
 
@@ -373,7 +390,8 @@ fun EditorScreen(
                     // READ Button (Dark container with play/speaker icon + "READ" label)
                     FloatingReadButton(
                         isPlaying = isPlaying,
-                        onClick = viewModel::togglePlay
+                        onClick = viewModel::togglePlay,
+                        onLongClick = viewModel::openLanguagePicker
                     )
 
                     // MIC Button (Bright Cyan pill with black mic icon)
@@ -389,7 +407,16 @@ fun EditorScreen(
                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         },
-                        onLongClick = viewModel::openLanguagePicker
+                        onLongClick = {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.RECORD_AUDIO
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                viewModel.openVoiceReplacePopup()
+                            } else {
+                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
                     )
                 }
             }
@@ -447,12 +474,25 @@ fun EditorScreen(
     if (showLanguagePicker) {
         LanguagePickerSheet(viewModel)
     }
+
+    if (showSaveDialog) {
+        SaveFileDialog(
+            viewModel = viewModel,
+            onBrowseSystemFolders = { fileNameToSave ->
+                createDocumentLauncher.launch(fileNameToSave)
+            }
+        )
+    }
+
+    SessionResumeDialog(viewModel = viewModel)
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FloatingReadButton(
     isPlaying: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val bgColor = if (isPlaying) Color(0xFF2563EB) else Color(0xFF161E30)
@@ -463,7 +503,10 @@ fun FloatingReadButton(
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .border(1.dp, Color(0xFF26324A), RoundedCornerShape(12.dp))
-            .instantClickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -494,7 +537,7 @@ fun FloatingReadButton(
 fun FloatingMicButton(
     isListening: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val bgColor = if (isListening) Color(0xFFFF4B6E) else Color(0xFF56D0DE)
@@ -577,7 +620,8 @@ fun EditorTextArea(
                     SelectionHighlightTransformation(
                         selection = textValue.selection,
                         transientHighlight = transientHighlightRange,
-                        highlightColor = highlightColor.copy(alpha = 0.55f)
+                        highlightColor = highlightColor.copy(alpha = 0.65f),
+                        highlightedTextColor = Color.White
                     )
                 },
                 cursorBrush = SolidColor(Color.Transparent),
@@ -600,41 +644,7 @@ fun EditorTextArea(
         Canvas(modifier = Modifier.matchParentSize()) {
             val layout = localLayoutResult
             if (layout != null) {
-                // 1. Draw empty-line highlight marker if active range covers an empty or blank line
-                val effectiveHlRange = if (textValue.selection.length > 0) {
-                    textValue.selection
-                } else {
-                    transientHighlightRange
-                }
-
-                if (effectiveHlRange != null && textValue.text.isNotEmpty()) {
-                    val rStart = min(effectiveHlRange.start, effectiveHlRange.end).coerceIn(0, textValue.text.length)
-                    val rEnd = max(effectiveHlRange.start, effectiveHlRange.end).coerceIn(0, textValue.text.length)
-                    val startLine = layout.getLineForOffset(rStart)
-                    val endLine = layout.getLineForOffset(rEnd)
-
-                    for (lineIdx in startLine..endLine) {
-                        val lStart = layout.getLineStart(lineIdx)
-                        val lEnd = layout.getLineEnd(lineIdx)
-                        val lineText = if (lStart < lEnd && lEnd <= textValue.text.length) {
-                            textValue.text.substring(lStart, lEnd).trimEnd('\n', '\r')
-                        } else ""
-
-                        if (lineText.isEmpty()) {
-                            val top = layout.getLineTop(lineIdx)
-                            val bottom = layout.getLineBottom(lineIdx)
-                            val h = bottom - top
-                            drawRoundRect(
-                                color = highlightColor.copy(alpha = 0.65f),
-                                topLeft = Offset(0f, top + 2.dp.toPx()),
-                                size = Size(36.dp.toPx(), (h - 4.dp.toPx()).coerceAtLeast(14.dp.toPx())),
-                                cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
-                            )
-                        }
-                    }
-                }
-
-                // 2. Draw caret
+                // Draw caret
                 val caret = textValue.selection.end.coerceIn(0, textValue.text.length)
                 val rect = layout.getCursorRect(caret)
                 drawRoundRect(

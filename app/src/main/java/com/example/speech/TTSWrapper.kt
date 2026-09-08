@@ -55,22 +55,30 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
             applyLanguage(currentLanguageTag)
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
-                    _isPlaying.value = true
+                    if (utteranceId?.startsWith("TTS_ID_") == true) {
+                        _isPlaying.value = true
+                    }
                 }
 
                 override fun onDone(utteranceId: String?) {
-                    _isPlaying.value = false
-                    _currentRange.value = null
+                    if (utteranceId?.startsWith("TTS_ID_") == true) {
+                        _isPlaying.value = false
+                        _currentRange.value = null
+                    }
                 }
 
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    _isPlaying.value = false
-                    _currentRange.value = null
+                    if (utteranceId?.startsWith("TTS_ID_") == true) {
+                        _isPlaying.value = false
+                        _currentRange.value = null
+                    }
                 }
 
                 override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
-                    _currentRange.value = Pair(currentStartOffset + start, currentStartOffset + end)
+                    if (utteranceId?.startsWith("TTS_ID_") == true) {
+                        _currentRange.value = Pair(currentStartOffset + start, currentStartOffset + end)
+                    }
                 }
             })
             pendingText?.let {
@@ -142,6 +150,16 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
         currentStartOffset = startOffset
         tts?.speak(textToRead, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID_${System.currentTimeMillis()}")
         _isPlaying.value = true
+    }
+
+    fun speakFeedback(text: String) {
+        if (text.isBlank()) return
+        if (tts == null || !isInitialized) return
+        try {
+            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "FEEDBACK_${System.currentTimeMillis()}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun stop() {

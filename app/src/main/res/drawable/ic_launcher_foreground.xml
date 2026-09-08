@@ -1,12 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="2.5" android:scaleY="2.5" android:translateX="24" android:translateY="24">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M12,14c1.66,0 3,-1.34 3,-3V5c0,-1.66 -1.34,-3 -3,-3S9,3.34 9,5v6C9,12.66 10.34,14 12,14zM17,11c0,2.76 -2.24,5 -5,5s-5,-2.24 -5,-5H5c0,3.53 2.61,6.43 6,6.92V21h2v-3.08c3.39,-0.49 6,-3.39 6,-6.92H17z"/>
-    </group>
+
+    <!-- Notepad Document Shadow -->
+    <path
+        android:pathData="M29,26 L65,26 C67.2,26 69,27.8 69,30 L69,78 C69,80.2 67.2,82 65,82 L29,82 C26.8,82 25,80.2 25,78 L25,30 C25,27.8 26.8,26 29,26 Z"
+        android:fillColor="#060B17"
+        android:fillAlpha="0.4" />
+
+    <!-- Main Notepad Page Card -->
+    <path
+        android:pathData="M28,24 L64,24 C66.2,24 68,25.8 68,28 L68,76 C68,78.2 66.2,80 64,80 L28,80 C25.8,80 24,78.2 24,76 L24,28 C24,25.8 25.8,24 28,24 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="24"
+                android:startY="24"
+                android:endX="68"
+                android:endY="80"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#1E293B" />
+                <item android:offset="1.0" android:color="#0F172A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Notepad Card Border Outline -->
+    <path
+        android:pathData="M28,24 L64,24 C66.2,24 68,25.8 68,28 L68,76 C68,78.2 66.2,80 64,80 L28,80 C25.8,80 24,78.2 24,76 L24,28 C24,25.8 25.8,24 28,24 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#334155" />
+
+    <!-- Top Notepad Header Bar / Bookmark Clip -->
+    <path
+        android:pathData="M32,24 L48,24 C49.1,24 50,24.9 50,26 L50,29 C50,30.1 49.1,31 48,31 L32,31 C30.9,31 30,30.1 30,29 L30,26 C30,24.9 30.9,24 32,24 Z"
+        android:fillColor="#38BDF8" />
+
+    <!-- Text Line 1: Accent / Title Bar (Cyan) -->
+    <path
+        android:pathData="M32,37 L54,37 C54.8,37 55.5,37.7 55.5,38.5 C55.5,39.3 54.8,40 54,40 L32,40 C31.2,40 30.5,39.3 30.5,38.5 C30.5,37.7 31.2,37 32,37 Z"
+        android:fillColor="#56D0DE" />
+
+    <!-- Text Line 2: Note Body (White / Soft Slate) -->
+    <path
+        android:pathData="M32,45 L60,45 C60.8,45 61.5,45.7 61.5,46.5 C61.5,47.3 60.8,48 60,48 L32,48 C31.2,48 30.5,47.3 30.5,46.5 C30.5,45.7 31.2,45 32,45 Z"
+        android:fillColor="#E2E8F0" />
+
+    <!-- Text Line 3: Note Body (Soft Slate) -->
+    <path
+        android:pathData="M32,53 L52,53 C52.8,53 53.5,53.7 53.5,54.5 C53.5,55.3 52.8,56 52,56 L32,56 C31.2,56 30.5,55.3 30.5,54.5 C30.5,53.7 31.2,53 32,53 Z"
+        android:fillColor="#94A3B8" />
+
+    <!-- Text Line 4: Note Body Short (Slate) -->
+    <path
+        android:pathData="M32,61 L44,61 C44.8,61 45.5,61.7 45.5,62.5 C45.5,63.3 44.8,64 44,64 L32,64 C31.2,64 30.5,63.3 30.5,62.5 C30.5,61.7 31.2,61 32,61 Z"
+        android:fillColor="#64748B" />
+
+    <!-- Text Line 5: Note Body Short (Slate) -->
+    <path
+        android:pathData="M32,69 L40,69 C40.8,69 41.5,69.7 41.5,70.5 C41.5,71.3 40.8,72 40,72 L32,72 C31.2,72 30.5,71.3 30.5,70.5 C30.5,69.7 31.2,69 32,69 Z"
+        android:fillColor="#475569" />
+
+    <!-- Floating Mic Badge Shadow -->
+    <path
+        android:pathData="M68,54 A17,17 0 1,0 68,88 A17,17 0 1,0 68,54 Z"
+        android:fillColor="#040814"
+        android:fillAlpha="0.5" />
+
+    <!-- Floating Mic Badge Outer Glow Ring -->
+    <path
+        android:pathData="M68,52 A16,16 0 1,0 68,84 A16,16 0 1,0 68,52 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="52"
+                android:startY="52"
+                android:endX="84"
+                android:endY="84"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#2563EB" />
+                <item android:offset="1.0" android:color="#0284C7" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M68,52 A16,16 0 1,0 68,84 A16,16 0 1,0 68,52 Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="#38BDF8" />
+
+    <!-- Soundwave Arcs on Badge -->
+    <path
+        android:pathData="M81,64 C82.2,65.8 82.8,67.8 82.8,70 C82.8,72.2 82.2,74.2 81,76"
+        android:strokeWidth="1.5"
+        android:strokeColor="#7DD3FC"
+        android:strokeLineCap="round" />
+
+    <!-- Microphone Center Silhouette Inside Badge -->
+    <!-- Mic capsule: center 68, 65, width 5, height 8 -->
+    <path
+        android:pathData="M68,69 C69.4,69 70.5,67.9 70.5,66.5 L70.5,61.5 C70.5,60.1 69.4,59 68,59 C66.6,59 65.5,60.1 65.5,61.5 L65.5,66.5 C65.5,67.9 66.6,69 68,69 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- Mic Cradle / Arc -->
+    <path
+        android:pathData="M73,65.5 C73,68.3 70.8,70.5 68,70.5 C65.2,70.5 63,68.3 63,65.5"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+
+    <!-- Mic Stem & Base -->
+    <path
+        android:pathData="M68,70.5 L68,74.5 M65,74.5 L71,74.5"
+        android:strokeWidth="1.5"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+
 </vector>
