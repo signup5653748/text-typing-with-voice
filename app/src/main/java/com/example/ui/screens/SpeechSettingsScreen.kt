@@ -164,20 +164,9 @@ fun SpeechSettingsScreen(
                             fontSize = 12.5.sp
                         )
 
-                        val topLocales = listOf(
-                            "en-US" to "English (US)",
-                            "en-GB" to "English (UK)",
-                            "es-ES" to "Spanish",
-                            "fr-FR" to "French",
-                            "de-DE" to "German",
-                            "it-IT" to "Italian",
-                            "ja-JP" to "Japanese",
-                            "zh-CN" to "Chinese",
-                            "hi-IN" to "Hindi",
-                            "ar" to "Arabic",
-                            "ru-RU" to "Russian",
-                            "pt-BR" to "Portuguese"
-                        )
+                        val availableVoices = ttsLocales.ifEmpty {
+                            listOf(Locale.getDefault())
+                        }
 
                         Row(
                             modifier = Modifier
@@ -185,12 +174,15 @@ fun SpeechSettingsScreen(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            topLocales.forEach { (code, name) ->
-                                val isSelected = settings.ttsLanguage == code
+                            availableVoices.distinctBy { it.language to it.country }.forEach { loc ->
+                                val tag = loc.toLanguageTag().ifBlank { "${loc.language}-${loc.country}".trimEnd('-') }
+                                val isSelected = settings.ttsLanguage == tag || (settings.ttsLanguage.isEmpty() && tag.startsWith("en", ignoreCase = true))
+                                val labelName = loc.getDisplayName(Locale.getDefault()).ifBlank { loc.displayName }.replaceFirstChar { it.uppercase() }
+
                                 FilterChip(
                                     selected = isSelected,
-                                    onClick = { viewModel.updateTtsLanguage(code) },
-                                    label = { Text(name, fontSize = 12.5.sp) },
+                                    onClick = { viewModel.updateTtsLanguage(tag) },
+                                    label = { Text(labelName, fontSize = 12.5.sp) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = Color(0xFF2563EB),
                                         selectedLabelColor = Color.White,
@@ -222,41 +214,38 @@ fun SpeechSettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            "Microphone input language recognition for dictation",
+                            "Actual installed/downloaded offline recognition languages",
                             color = Color(0xFF8FA7D8),
                             fontSize = 12.5.sp
                         )
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            val displayLanguages = if (speechLanguages.isNotEmpty()) speechLanguages else listOf(
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("English (US)", "en-US", true),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("English (UK)", "en-GB", true),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("Spanish", "es-ES", false),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("French", "fr-FR", false),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("German", "de-DE", false),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("Japanese", "ja-JP", false),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("Chinese", "zh-CN", false),
-                                com.example.speech.SpeechRecognitionWrapper.LanguagePack("Hindi", "hi-IN", false)
+                        if (speechLanguages.isEmpty()) {
+                            Text(
+                                "No downloaded offline voice packs detected",
+                                color = Color(0xFF64748B),
+                                fontSize = 13.sp
                             )
-
-                            displayLanguages.forEach { lang ->
-                                val isSelected = settings.voiceLanguage == lang.languageCode
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = { viewModel.setLanguage(lang.languageCode) },
-                                    label = { Text(lang.displayName, fontSize = 12.5.sp) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFF059669),
-                                        selectedLabelColor = Color.White,
-                                        containerColor = Color(0xFF20293D),
-                                        labelColor = Color(0xFFECEFF8)
+                        } else {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                speechLanguages.forEach { lang ->
+                                    val isSelected = settings.voiceLanguage == lang.languageCode
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { viewModel.setLanguage(lang.languageCode) },
+                                        label = { Text(lang.displayName, fontSize = 12.5.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = Color(0xFF059669),
+                                            selectedLabelColor = Color.White,
+                                            containerColor = Color(0xFF20293D),
+                                            labelColor = Color(0xFFECEFF8)
+                                        )
                                     )
-                                )
+                                }
                             }
                         }
                     }
