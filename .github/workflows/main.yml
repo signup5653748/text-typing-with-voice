@@ -245,7 +245,21 @@ jobs:
           echo "No signed release APK found. Check the 'Build with Gradle' log above."
           exit 1
         fi
-        echo "$FOUND" | while read -r apk; do cp "$apk" "./build-artifacts/"; done
+        # Renamed using the repo name (from GitHub's own context - always
+        # accurate, no manual typing needed) instead of keeping Gradle's
+        # generic output filename (e.g. "app-release.apk").
+        REPO_NAME="${{ github.event.repository.name }}"
+        COUNT=0
+        echo "$FOUND" | while read -r apk; do
+          COUNT=$((COUNT + 1))
+          if [ "$COUNT" -eq 1 ]; then
+            cp "$apk" "./build-artifacts/${REPO_NAME}-${{ env.RELEASE_TAG }}.apk"
+          else
+            cp "$apk" "./build-artifacts/${REPO_NAME}-${{ env.RELEASE_TAG }}-${COUNT}.apk"
+          fi
+        done
+        echo "Renamed APK(s):"
+        ls -la build-artifacts/
 
     # No separate artifact upload - the APK is already fully available via
     # the versioned release and the rolling "latest" release below, and a
