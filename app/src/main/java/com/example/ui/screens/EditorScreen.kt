@@ -12,8 +12,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -21,6 +23,8 @@ import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -35,7 +39,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -58,26 +68,54 @@ fun EditorScreen(
     viewModel: EditorViewModel,
     onNavigateToSettings: () -> Unit
 ) {
+    val context = LocalContext.current
+    val textValue by viewModel.textValue.collectAsState()
+    val currentUri by viewModel.currentFileUri.collectAsState()
+    val fileName by viewModel.fileName.collectAsState()
+    val kActive by viewModel.kActive.collectAsState()
+    val pActive by viewModel.pActive.collectAsState()
     val selActive by viewModel.selActive.collectAsState()
     val kbLockActive by viewModel.kbLockActive.collectAsState()
-    val fileName by viewModel.fileName.collectAsState()
-    val showReplacePopup by viewModel.showReplacePopup.collectAsState()
-    val showLanguagePicker by viewModel.showLanguagePicker.collectAsState()
-    val showSaveDialog by viewModel.showSaveDialog.collectAsState()
+    val canUndo by viewModel.canUndo.collectAsState()
+    val canRedo by viewModel.canRedo.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
     val isPlaying by viewModel.ttsWrapper.isPlaying.collectAsState()
     val transientHighlightRange by viewModel.transientHighlightRange.collectAsState()
 
+    val displayFileName = remember(fileName) {
+        fileName.removeSuffix(".txt").removeSuffix(".TXT")
+    }
+
+    var showMoreControlsSheetState by remember { mutableStateOf(false) }
+    val showReplacePopup by viewModel.showReplacePopup.collectAsState()
+    val showLanguagePicker by viewModel.showLanguagePicker.collectAsState()
+    val showSaveDialog by viewModel.showSaveDialog.collectAsState()
+
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val searchMatches by viewModel.searchMatches.collectAsState()
     val currentMatchIndex by viewModel.currentMatchIndex.collectAsState()
-    val searchQuery by viewModel.searchQuery.collectAsState()
-
-    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    val context = LocalContext.current
-    var menuExpanded by remember { mutableStateOf(false) }
-    var showMoreControlsSheet by remember { mutableStateOf(false) }
     var showSearchBar by remember { mutableStateOf(false) }
+
+    val showJumpToDialog by viewModel.showJumpToDialog.collectAsState()
+    val jumpToHeadings by viewModel.jumpToHeadings.collectAsState()
+
+    var menuExpanded by remember { mutableStateOf(false) }
+    val buttonOrderList = remember(settings.buttonOrder) {
+        val list = settings.buttonOrder.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (list.isNotEmpty()) list else listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "MORE", "REPLACE", "K", "P", "KB_LOCK")
+    }
+
+    val highlightColor = remember(settings.highlightColorHex) {
+        Color(settings.highlightColorHex)
+    }
+    val editorBgColor = remember(settings.backgroundColorHex) {
+        Color(settings.backgroundColorHex)
+    }
+    val textColor = remember(settings.textColorHex) {
+        Color(settings.textColorHex)
+    }
+
     val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -91,112 +129,96 @@ fun EditorScreen(
     val openDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) viewModel.loadFromUri(uri)
+        if (uri != null) {
+            viewModel.loadFromUri(uri, isFromExternalOrExplicitOpen = true)
+        }
     }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
     ) { uri ->
-        if (uri != null) viewModel.saveToUri(uri)
-    }
-
-    androidx.activity.compose.BackHandler(
-        enabled = showSearchBar || showReplacePopup || showMoreControlsSheet || showLanguagePicker || menuExpanded
-    ) {
-        if (menuExpanded) {
-            menuExpanded = false
-        } else if (showSearchBar) {
-            keyboardController?.hide()
-            showSearchBar = false
-            viewModel.clearSearch()
-        } else if (showReplacePopup) {
-            viewModel.closeReplacePopup()
-        } else if (showMoreControlsSheet) {
-            showMoreControlsSheet = false
-        } else if (showLanguagePicker) {
-            viewModel.closeLanguagePicker()
+        if (uri != null) {
+            viewModel.saveToUri(uri)
         }
-    }
-
-    val editorBgColor = Color(settings.backgroundColorHex)
-    val highlightColor = Color(settings.highlightColorHex)
-    val buttonOrderList = remember(settings.buttonOrder) {
-        settings.buttonOrder.split(",").filter { it.isNotBlank() }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = {
+                title = {
                     if (showSearchBar) {
-                        IconButton(onClick = {
-                            keyboardController?.hide()
-                            showSearchBar = false
-                            viewModel.clearSearch()
-                        }) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Close Search",
-                                tint = Color(0xFF8FA7D8)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = viewModel::updateSearchQuery,
+                                placeholder = { Text("Search text...", color = Color(0xFF6B7FA8), fontSize = 14.sp) },
+                                singleLine = true,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedTextColor = Color.White,
+                                    unfocusedTextColor = Color.White
+                                ),
+                                modifier = Modifier.weight(1f)
                             )
+                        }
+                    } else {
+                        Column {
+                            Text(
+                                text = displayFileName,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFECEEF2)
+                            )
+                            if (kActive || pActive || selActive || kbLockActive) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (kActive) {
+                                        ModeIndicatorBadge(text = "K: CHAR", color = Color(0xFF56D0DE))
+                                    }
+                                    if (pActive) {
+                                        ModeIndicatorBadge(text = "P: PARA", color = Color(0xFF56D0DE))
+                                    }
+                                    if (selActive) {
+                                        ModeIndicatorBadge(text = "SEL ON", color = highlightColor)
+                                    }
+                                    if (kbLockActive) {
+                                        ModeIndicatorBadge(text = "KB LOCK", color = Color(0xFFFF6584))
+                                    }
+                                }
+                            }
                         }
                     }
                 },
-                title = {
-                    if (showSearchBar) {
-                        TextField(
-                            value = searchQuery,
-                            onValueChange = { viewModel.updateSearchQuery(it) },
-                            placeholder = { Text("Search in document...", color = Color(0xFF6B7894), fontSize = 14.sp) },
-                            singleLine = true,
-                            textStyle = TextStyle(color = Color.White, fontSize = 15.sp),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent,
-                                unfocusedIndicatorColor = Color.Transparent
-                            ),
-                            trailingIcon = {
-                                if (searchQuery.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.clearSearch() }) {
-                                        Icon(
-                                            Icons.Default.Close,
-                                            contentDescription = "Clear",
-                                            tint = Color(0xFF8FA7D8),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
-                        Text(
-                            text = fileName,
-                            fontWeight = FontWeight.Normal,
-                            fontSize = 17.sp,
-                            color = Color(0xFFD0D7E5)
-                        )
-                    }
-                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF161A24)
+                    containerColor = Color(0xFF0F1420)
                 ),
                 actions = {
                     if (showSearchBar) {
-                        if (searchQuery.isNotEmpty()) {
-                            // Match count badge
-                            Surface(
-                                color = Color(0xFF20293D),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.padding(end = 4.dp)
-                            ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (searchMatches.isNotEmpty()) {
                                 Text(
-                                    text = if (searchMatches.isNotEmpty()) "${currentMatchIndex + 1}/${searchMatches.size}" else "0/0",
-                                    color = if (searchMatches.isNotEmpty()) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
+                                    text = "${currentMatchIndex + 1}/${searchMatches.size}",
+                                    color = Color(0xFF56D0DE),
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            IconButton(onClick = {
+                                showSearchBar = false
+                                viewModel.clearSearch()
+                            }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Close Search",
+                                    tint = Color(0xFF8FA7D8)
                                 )
                             }
 
@@ -225,6 +247,17 @@ fun EditorScreen(
                             }
                         }
                     } else {
+                        IconButton(
+                            onClick = { viewModel.undo() },
+                            enabled = canUndo
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Undo,
+                                contentDescription = "Undo",
+                                tint = if (canUndo) Color(0xFF8FA7D8) else Color(0xFF4A5568)
+                            )
+                        }
+
                         IconButton(onClick = {
                             showSearchBar = true
                             if (searchQuery.isNotEmpty()) {
@@ -257,6 +290,22 @@ fun EditorScreen(
                                 .background(Color(0xFF161E30))
                                 .border(1.dp, Color(0xFF26344E), RoundedCornerShape(14.dp))
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Redo", color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF6B7FA8), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                                        contentDescription = "Redo",
+                                        tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                },
+                                enabled = canRedo,
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.redo()
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("New File", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
                                 leadingIcon = {
@@ -306,7 +355,7 @@ fun EditorScreen(
                                 text = { Text("Save As...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.DriveFolderUpload,
+                                        imageVector = Icons.Default.SaveAs,
                                         contentDescription = "Save As",
                                         tint = Color(0xFF8FA7D8),
                                         modifier = Modifier.size(20.dp)
@@ -317,31 +366,29 @@ fun EditorScreen(
                                     viewModel.openSaveDialog(isSaveAs = true)
                                 }
                             )
-
-                            HorizontalDivider(color = Color(0xFF243048), modifier = Modifier.padding(vertical = 4.dp))
-
                             DropdownMenuItem(
-                                text = { Text("Extra Controls (K, P, Lock)", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                                text = { Text("Jump to...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.Tune,
-                                        contentDescription = "Controls",
-                                        tint = Color(0xFF60A5FA),
+                                        imageVector = Icons.Default.FormatListBulleted,
+                                        contentDescription = "Jump to",
+                                        tint = Color(0xFF56D0DE),
                                         modifier = Modifier.size(20.dp)
                                     )
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    showMoreControlsSheet = true
+                                    viewModel.openJumpTo()
                                 }
                             )
+                            HorizontalDivider(color = Color(0xFF222B3F), modifier = Modifier.padding(vertical = 4.dp))
                             DropdownMenuItem(
                                 text = { Text("Settings", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.Settings,
                                         contentDescription = "Settings",
-                                        tint = Color(0xFFA78BFA),
+                                        tint = Color(0xFF8FA7D8),
                                         modifier = Modifier.size(20.dp)
                                     )
                                 },
@@ -387,14 +434,18 @@ fun EditorScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // READ Button (Dark container with play/speaker icon + "READ" label)
+                    // READ Button (Single click only = instantly reads text aloud. No long-press action)
                     FloatingReadButton(
                         isPlaying = isPlaying,
-                        onClick = viewModel::togglePlay,
-                        onLongClick = viewModel::openLanguagePicker
+                        onClick = viewModel::togglePlay
                     )
 
-                    // MIC Button (Bright Cyan pill with black mic icon)
+                    // MIC Button:
+                    // When alwaysInsertMicDirectly = true (default): always inserts dictation directly at caret
+                    // When alwaysInsertMicDirectly = false:
+                    //   - If selection active -> Voice Replace Mode
+                    //   - If no selection -> Normal Voice Typing
+                    // Long-press = Opens Language Picker (controls speech-to-text and read-aloud language)
                     FloatingMicButton(
                         isListening = isListening,
                         onClick = {
@@ -402,47 +453,105 @@ fun EditorScreen(
                                 context, Manifest.permission.RECORD_AUDIO
                             ) == PackageManager.PERMISSION_GRANTED
                             if (hasPermission) {
-                                viewModel.onMicClicked()
+                                if (settings.alwaysInsertMicDirectly) {
+                                    viewModel.onMicClicked()
+                                } else {
+                                    val hasSelection = selActive || (textValue.selection.start != textValue.selection.end && textValue.text.isNotEmpty())
+                                    if (hasSelection) {
+                                        viewModel.openVoiceReplacePopup()
+                                    } else {
+                                        viewModel.onMicClicked()
+                                    }
+                                }
                             } else {
                                 permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         },
                         onLongClick = {
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                context, Manifest.permission.RECORD_AUDIO
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPermission) {
-                                viewModel.openVoiceReplacePopup()
-                            } else {
-                                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            }
+                            viewModel.openLanguagePicker()
                         }
                     )
                 }
             }
 
-            // Bottom Keypad / Control Area
-            Box(
+            // Bottom Control Area (Quick Navigation Row + Keypad Matrix & Arrow Cluster)
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF0A0E18))
-                    .padding(horizontal = 10.dp, vertical = 10.dp)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // Compact Mode Toggles & Quick Navigation Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Side: 2x3 Grid (Customizable buttons)
-                    ActionButtonGrid(
-                        onActionClick = viewModel::onAction,
-                        onMoreClick = { showMoreControlsSheet = true },
-                        buttonOrder = buttonOrderList,
-                        sizeMultiplier = settings.buttonSizeMultiplier,
+                    QuickToggleButton(
+                        label = "K",
+                        subLabel = if (kActive) "CHAR" else "WORD",
+                        isActive = kActive,
+                        activeColor = Color(0xFF56D0DE),
+                        onClick = viewModel::toggleK,
                         modifier = Modifier.weight(1f)
                     )
+                    QuickToggleButton(
+                        label = "P",
+                        subLabel = if (pActive) "PARA" else "LINE",
+                        isActive = pActive,
+                        activeColor = Color(0xFF56D0DE),
+                        onClick = viewModel::toggleP,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickToggleButton(
+                        label = "KB",
+                        subLabel = if (kbLockActive) "LOCK" else "UNLK",
+                        isActive = kbLockActive,
+                        activeColor = Color(0xFFFF6584),
+                        onClick = viewModel::toggleKbLock,
+                        modifier = Modifier.weight(1f)
+                    )
+                    QuickToolButton(
+                        icon = Icons.Default.VerticalAlignTop,
+                        label = "TOP",
+                        onClick = viewModel::jumpStart,
+                        modifier = Modifier.weight(0.9f)
+                    )
+                    QuickToolButton(
+                        icon = Icons.Default.VerticalAlignBottom,
+                        label = "END",
+                        onClick = viewModel::jumpEnd,
+                        modifier = Modifier.weight(0.9f)
+                    )
+                    QuickToolButton(
+                        icon = Icons.Default.SelectAll,
+                        label = "ALL",
+                        onClick = viewModel::selectAll,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
 
-                    // Right Side: D-Pad Directional Cluster
+                // 2 Equal-Width Panels: Action Grid (Left 1f) and Arrow Cluster (Right 1f)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Left Side: 2x3 Grid
+                    ActionButtonGrid(
+                        onActionClick = viewModel::onAction,
+                        onMoreClick = { showMoreControlsSheetState = true },
+                        buttonOrder = buttonOrderList,
+                        sizeMultiplier = settings.buttonSizeMultiplier,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+
+                    // Right Side: 3x3 D-Pad Directional Cluster
                     ArrowKeyCluster(
                         selActive = selActive,
                         scale = settings.arrowSize,
@@ -452,18 +561,20 @@ fun EditorScreen(
                         onMoveRight = viewModel::moveRight,
                         onToggleSel = viewModel::toggleSel,
                         activeHighlightColor = highlightColor,
-                        modifier = Modifier.wrapContentWidth()
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     )
                 }
             }
         }
     }
 
-    if (showMoreControlsSheet) {
+    if (showMoreControlsSheetState) {
         MoreControlsSheet(
             viewModel = viewModel,
             onNavigateToSettings = onNavigateToSettings,
-            onDismiss = { showMoreControlsSheet = false }
+            onDismiss = { showMoreControlsSheetState = false }
         )
     }
 
@@ -484,15 +595,105 @@ fun EditorScreen(
         )
     }
 
+    if (showJumpToDialog) {
+        JumpToDialog(
+            headings = jumpToHeadings,
+            onSelectHeading = { viewModel.jumpToHeading(it) },
+            onDismiss = { viewModel.closeJumpTo() }
+        )
+    }
+
     SessionResumeDialog(viewModel = viewModel)
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun QuickToggleButton(
+    label: String,
+    subLabel: String,
+    isActive: Boolean,
+    activeColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (isActive) activeColor.copy(alpha = 0.2f) else Color(0xFF141C2B)
+    val borderColor = if (isActive) activeColor else Color(0xFF222E44)
+    val textColor = if (isActive) activeColor else Color(0xFFECEFF8)
+    val subTextColor = if (isActive) activeColor else Color(0xFF8FA7D8)
+
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bgColor)
+            .border(1.dp, borderColor, RoundedCornerShape(8.dp))
+            .instantClickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = label,
+                color = textColor,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                lineHeight = 11.sp
+            )
+            Text(
+                text = subLabel,
+                color = subTextColor,
+                fontWeight = FontWeight.Medium,
+                fontSize = 8.sp,
+                lineHeight = 8.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun QuickToolButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .height(34.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF141C2B))
+            .border(1.dp, Color(0xFF222E44), RoundedCornerShape(8.dp))
+            .instantClickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(horizontal = 6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = Color(0xFF8FA7D8),
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            Text(
+                text = label,
+                color = Color(0xFFECEFF8),
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
 @Composable
 fun FloatingReadButton(
     isPlaying: Boolean,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val bgColor = if (isPlaying) Color(0xFF2563EB) else Color(0xFF161E30)
@@ -503,10 +704,7 @@ fun FloatingReadButton(
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .border(1.dp, Color(0xFF26324A), RoundedCornerShape(12.dp))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
+            .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -563,6 +761,39 @@ fun FloatingMicButton(
 }
 
 @Composable
+fun ModeIndicatorBadge(
+    text: String,
+    color: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(color.copy(alpha = 0.15f))
+            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 1.dp)
+    ) {
+        Text(
+            text = text,
+            color = color,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+private val EmptyTextToolbar = object : TextToolbar {
+    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+    override fun hide() {}
+    override fun showMenu(
+        rect: androidx.compose.ui.geometry.Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?
+    ) {}
+}
+
+@Composable
 fun EditorTextArea(
     viewModel: EditorViewModel,
     kbLockActive: Boolean,
@@ -572,38 +803,55 @@ fun EditorTextArea(
 ) {
     val textValue by viewModel.textValue.collectAsState()
     val settings by viewModel.settings.collectAsState()
-    var localLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val focusRequester = remember { FocusRequester() }
-
-    val textColor = Color(settings.textColorHex)
-    val highlightColor = Color(settings.highlightColorHex)
+    val highlightColor = remember(settings.highlightColorHex) { Color(settings.highlightColorHex) }
+    val textColor = remember(settings.textColorHex) { Color(settings.textColorHex) }
     val textSize = settings.textSizeSp.sp
-    val lineHeight = (settings.textSizeSp * 1.45f).sp
+    val lineHeight = (settings.textSizeSp * 1.4f).sp
 
+    val focusRequester = remember { FocusRequester() }
+    var localLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // Blinking cursor animation - only runs when keyboard is unlocked and no highlight is active
     val cursorAlpha = remember { Animatable(1f) }
-    LaunchedEffect(textValue.selection, textValue.text) {
-        cursorAlpha.snapTo(1f)
-        while (true) {
-            delay(530)
-            cursorAlpha.animateTo(0f, animationSpec = tween(120))
-            delay(200)
-            cursorAlpha.animateTo(1f, animationSpec = tween(120))
+    LaunchedEffect(textValue.selection, kbLockActive, transientHighlightRange) {
+        if (kbLockActive || textValue.selection.length > 0 || transientHighlightRange != null) {
+            cursorAlpha.snapTo(0f)
+        } else {
+            while (true) {
+                cursorAlpha.animateTo(0f, animationSpec = tween(500))
+                cursorAlpha.animateTo(1f, animationSpec = tween(500))
+            }
         }
     }
 
-    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
-    LaunchedEffect(kbLockActive) {
-        if (kbLockActive) {
-            keyboardController?.hide()
-        }
-    }
-
-    Box(modifier = modifier) {
-        val brightSelectionColors = TextSelectionColors(
-            handleColor = highlightColor,
-            backgroundColor = highlightColor.copy(alpha = 0.55f)
+    Box(
+        modifier = modifier.then(
+            if (kbLockActive) {
+                Modifier.pointerInput(Unit) {
+                    detectTapGestures { tapOffset ->
+                        keyboardController?.hide()
+                        localLayoutResult?.let { layout ->
+                            val offset = layout.getOffsetForPosition(tapOffset)
+                            viewModel.setCaretFromTap(offset)
+                        }
+                    }
+                }
+            } else {
+                Modifier
+            }
         )
-        CompositionLocalProvider(LocalTextSelectionColors provides brightSelectionColors) {
+    ) {
+        val invisibleSelectionColors = remember {
+            TextSelectionColors(
+                handleColor = Color.Transparent,
+                backgroundColor = Color.Transparent
+            )
+        }
+        CompositionLocalProvider(
+            LocalTextSelectionColors provides invisibleSelectionColors,
+            LocalTextToolbar provides EmptyTextToolbar
+        ) {
             BasicTextField(
                 value = textValue,
                 onValueChange = viewModel::onTextChanged,
@@ -616,12 +864,14 @@ fun EditorTextArea(
                     fontSize = textSize,
                     lineHeight = lineHeight
                 ),
-                visualTransformation = remember(textValue.selection, transientHighlightRange, highlightColor) {
+                visualTransformation = remember(textValue.selection, transientHighlightRange, highlightColor, settings.hideHeadingSymbols) {
+                    val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
                     SelectionHighlightTransformation(
                         selection = textValue.selection,
                         transientHighlight = transientHighlightRange,
-                        highlightColor = highlightColor.copy(alpha = 0.65f),
-                        highlightedTextColor = Color.White
+                        highlightColor = highlightColor.copy(alpha = 0.7f),
+                        highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White,
+                        hideHeadingSymbols = settings.hideHeadingSymbols
                     )
                 },
                 cursorBrush = SolidColor(Color.Transparent),
@@ -641,18 +891,24 @@ fun EditorTextArea(
             )
         }
 
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val layout = localLayoutResult
-            if (layout != null) {
-                // Draw caret
-                val caret = textValue.selection.end.coerceIn(0, textValue.text.length)
-                val rect = layout.getCursorRect(caret)
-                drawRoundRect(
-                    color = highlightColor.copy(alpha = cursorAlpha.value),
-                    topLeft = Offset(rect.left, rect.top),
-                    size = Size(2.5.dp.toPx(), rect.height),
-                    cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
-                )
+        if (!kbLockActive && textValue.selection.collapsed && transientHighlightRange == null) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val layout = localLayoutResult
+                if (layout != null) {
+                    try {
+                        val maxLayoutOffset = layout.layoutInput.text.length
+                        val caret = textValue.selection.end.coerceIn(0, maxLayoutOffset)
+                        val rect = layout.getCursorRect(caret)
+                        drawRoundRect(
+                            color = highlightColor.copy(alpha = cursorAlpha.value),
+                            topLeft = Offset(rect.left, rect.top),
+                            size = Size(2.5.dp.toPx(), rect.height),
+                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                        )
+                    } catch (e: Exception) {
+                        // Ignore race condition between text edit and layout calculation
+                    }
+                }
             }
         }
     }

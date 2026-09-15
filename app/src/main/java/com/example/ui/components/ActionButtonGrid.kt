@@ -1,15 +1,28 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.KeyboardReturn
+import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.FindReplace
+import androidx.compose.material.icons.filled.FormatAlignLeft
+import androidx.compose.material.icons.filled.KeyboardHide
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.VerticalAlignBottom
+import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,82 +36,47 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ActionButton
 
+private val DEFAULT_3X3_BUTTONS = listOf(
+    "CUT", "COPY", "DELETE",
+    "PASTE", "SELECT_ALL", "ENTER",
+    "JUMP_TO", "TOP", "END",
+    "MORE", "REPLACE", "K", "P", "KB_LOCK"
+)
+
 @Composable
 fun ActionButtonGrid(
     onActionClick: (ActionButton) -> Unit,
     onMoreClick: () -> Unit,
-    buttonOrder: List<String> = listOf("CUT", "COPY", "DELETE", "PASTE", "MORE", "ENTER"),
+    buttonOrder: List<String> = DEFAULT_3X3_BUTTONS,
     sizeMultiplier: Float = 1.0f,
     modifier: Modifier = Modifier
 ) {
-    val buttonHeight = (48.dp * sizeMultiplier).coerceIn(36.dp, 72.dp)
-    val buttonList = if (buttonOrder.size >= 6) buttonOrder else listOf("CUT", "COPY", "DELETE", "PASTE", "MORE", "ENTER")
+    val buttonList = if (buttonOrder.isNotEmpty()) buttonOrder else DEFAULT_3X3_BUTTONS
+    val spacing = 6.dp
 
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+    BoxWithConstraints(
+        modifier = modifier.fillMaxHeight()
     ) {
-        // Row 1
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            DynamicActionButton(
-                type = buttonList.getOrElse(0) { "CUT" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
-            DynamicActionButton(
-                type = buttonList.getOrElse(1) { "COPY" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
-        }
+        // Calculate itemHeight so exactly 3 rows fit into the container height (matching the 3x3 arrow cluster)
+        val itemHeight = ((maxHeight - (spacing * 2)) / 3).coerceAtLeast(48.dp)
 
-        // Row 2
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            modifier = Modifier.fillMaxSize()
         ) {
-            DynamicActionButton(
-                type = buttonList.getOrElse(2) { "DELETE" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
-            DynamicActionButton(
-                type = buttonList.getOrElse(3) { "PASTE" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
-        }
-
-        // Row 3
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            DynamicActionButton(
-                type = buttonList.getOrElse(4) { "MORE" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
-            DynamicActionButton(
-                type = buttonList.getOrElse(5) { "ENTER" },
-                onActionClick = onActionClick,
-                onMoreClick = onMoreClick,
-                sizeMultiplier = sizeMultiplier,
-                modifier = Modifier.weight(1f).height(buttonHeight)
-            )
+            items(buttonList) { btnType ->
+                DynamicActionButton(
+                    type = btnType,
+                    onActionClick = onActionClick,
+                    onMoreClick = onMoreClick,
+                    sizeMultiplier = sizeMultiplier,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(itemHeight)
+                )
+            }
         }
     }
 }
@@ -111,7 +89,8 @@ private fun DynamicActionButton(
     sizeMultiplier: Float,
     modifier: Modifier = Modifier
 ) {
-    when (type) {
+    val upper = type.trim().uppercase()
+    when (upper) {
         "CUT" -> KeypadActionButton(
             label = "CUT",
             icon = Icons.Default.ContentCut,
@@ -148,12 +127,12 @@ private fun DynamicActionButton(
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )
-        "MORE" -> KeypadActionButton(
-            label = "MORE",
-            icon = Icons.Default.MoreHoriz,
+        "SELECT_ALL", "ALL", "SEL_ALL" -> KeypadActionButton(
+            label = "ALL",
+            icon = Icons.Default.SelectAll,
             iconColor = Color(0xFF8FA7D8),
             textColor = Color(0xFF8FA7D8),
-            onClick = onMoreClick,
+            onClick = { onActionClick(ActionButton.SELECT_ALL) },
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )
@@ -163,6 +142,78 @@ private fun DynamicActionButton(
             iconColor = Color(0xFF8FA7D8),
             textColor = Color(0xFF8FA7D8),
             onClick = { onActionClick(ActionButton.ENTER) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "JUMP_TO", "JUMP" -> KeypadActionButton(
+            label = "JUMP",
+            icon = Icons.AutoMirrored.Filled.List,
+            iconColor = Color(0xFF56D0DE),
+            textColor = Color(0xFF56D0DE),
+            onClick = { onActionClick(ActionButton.JUMP_TO) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "TOP" -> KeypadActionButton(
+            label = "TOP",
+            icon = Icons.Default.VerticalAlignTop,
+            iconColor = Color(0xFF8FA7D8),
+            textColor = Color(0xFF8FA7D8),
+            onClick = { onActionClick(ActionButton.TOP) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "END" -> KeypadActionButton(
+            label = "END",
+            icon = Icons.Default.VerticalAlignBottom,
+            iconColor = Color(0xFF8FA7D8),
+            textColor = Color(0xFF8FA7D8),
+            onClick = { onActionClick(ActionButton.END) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "REPLACE", "REP" -> KeypadActionButton(
+            label = "REP",
+            icon = Icons.Default.FindReplace,
+            iconColor = Color(0xFF56D0DE),
+            textColor = Color(0xFF56D0DE),
+            onClick = { onActionClick(ActionButton.REPLACE) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "MORE" -> KeypadActionButton(
+            label = "MORE",
+            icon = Icons.Default.MoreHoriz,
+            iconColor = Color(0xFF8FA7D8),
+            textColor = Color(0xFF8FA7D8),
+            onClick = onMoreClick,
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "K" -> KeypadActionButton(
+            label = "K",
+            icon = Icons.Default.TextFields,
+            iconColor = Color(0xFF56D0DE),
+            textColor = Color(0xFF56D0DE),
+            onClick = { onActionClick(ActionButton.K) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "P" -> KeypadActionButton(
+            label = "P",
+            icon = Icons.Default.FormatAlignLeft,
+            iconColor = Color(0xFF56D0DE),
+            textColor = Color(0xFF56D0DE),
+            onClick = { onActionClick(ActionButton.P) },
+            sizeMultiplier = sizeMultiplier,
+            modifier = modifier
+        )
+        "KB_LOCK", "KB" -> KeypadActionButton(
+            label = "KB",
+            icon = Icons.Default.KeyboardHide,
+            iconColor = Color(0xFFFF6584),
+            textColor = Color(0xFFFF6584),
+            onClick = { onActionClick(ActionButton.KB_LOCK) },
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )
@@ -189,20 +240,21 @@ private fun KeypadActionButton(
     modifier: Modifier = Modifier
 ) {
     val bgColor = Color(0xFF182032)
-    val iconSize = (19.dp * sizeMultiplier).coerceIn(16.dp, 28.dp)
-    val fontSize = (9.5f * sizeMultiplier).coerceIn(8f, 14f).sp
+    val iconSize = (18.dp * sizeMultiplier).coerceIn(15.dp, 24.dp)
+    val fontSize = (9.5f * sizeMultiplier).coerceIn(8f, 13f).sp
 
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
+            .border(1.dp, Color(0xFF243048), RoundedCornerShape(12.dp))
             .instantClickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(2.dp)
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
         ) {
             Icon(
                 imageVector = icon,
@@ -216,8 +268,10 @@ private fun KeypadActionButton(
                 color = textColor,
                 fontWeight = FontWeight.Bold,
                 fontSize = fontSize,
-                letterSpacing = 0.5.sp
+                letterSpacing = 0.5.sp,
+                maxLines = 1
             )
         }
     }
 }
+

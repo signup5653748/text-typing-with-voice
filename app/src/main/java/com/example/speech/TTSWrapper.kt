@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import com.example.logic.HeadingLogic
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
@@ -27,6 +28,8 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
 
     private var currentLanguageTag: String = "en-US"
     private var currentEnginePkg: String? = null
+    private var currentRate: Float = 1.0f
+    private var currentPitch: Float = 1.0f
 
     init {
         // Initialize immediately to be ready
@@ -53,6 +56,8 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
             isInitialized = true
             isInitializing = false
             applyLanguage(currentLanguageTag)
+            tts?.setSpeechRate(currentRate)
+            tts?.setPitch(currentPitch)
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     if (utteranceId?.startsWith("TTS_ID_") == true) {
@@ -87,6 +92,20 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
             }
         } else {
             isInitializing = false
+        }
+    }
+
+    fun setSpeechRate(rate: Float) {
+        currentRate = rate
+        if (isInitialized) {
+            tts?.setSpeechRate(rate)
+        }
+    }
+
+    fun setPitch(pitch: Float) {
+        currentPitch = pitch
+        if (isInitialized) {
+            tts?.setPitch(pitch)
         }
     }
 
@@ -136,15 +155,16 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun play(text: String, startOffset: Int = 0) {
+        val sanitized = HeadingLogic.stripHeadingSymbolsForTTS(text)
         if (tts == null || !isInitialized) {
-            pendingText = text
+            pendingText = sanitized
             pendingStartOffset = startOffset
             if (!isInitializing) {
                 initializeTTS(currentEnginePkg)
             }
             return
         }
-        val textToRead = text.substring(startOffset)
+        val textToRead = sanitized.substring(startOffset.coerceIn(0, sanitized.length))
         if (textToRead.isBlank()) return
         
         currentStartOffset = startOffset
@@ -153,10 +173,11 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun speakFeedback(text: String) {
-        if (text.isBlank()) return
+        val sanitized = HeadingLogic.stripHeadingSymbolsForTTS(text)
+        if (sanitized.isBlank()) return
         if (tts == null || !isInitialized) return
         try {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "FEEDBACK_${System.currentTimeMillis()}")
+            tts?.speak(sanitized, TextToSpeech.QUEUE_FLUSH, null, "FEEDBACK_${System.currentTimeMillis()}")
         } catch (e: Exception) {
             e.printStackTrace()
         }

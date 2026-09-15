@@ -105,7 +105,7 @@ class MainActivity : ComponentActivity() {
             val uri = intent.data
             if (uri != null && uri != handledUri) {
                 handledUri = uri
-                viewModel.loadFromUri(uri)
+                viewModel.loadFromUri(uri, isFromExternalOrExplicitOpen = true)
             }
         }
     }

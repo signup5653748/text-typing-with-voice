@@ -6,13 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.VerticalAlignBottom
-import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -39,10 +35,16 @@ fun MoreControlsSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF141926),
+        containerColor = Color(0xFF131826),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = {
-            BottomSheetDefaults.DragHandle(
-                color = Color(0xFF333E56)
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 10.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color(0xFF26324A))
             )
         }
     ) {
@@ -101,61 +103,65 @@ fun MoreControlsSheet(
                 onToggle = viewModel::toggleKbLock
             )
 
-            HorizontalDivider(color = Color(0xFF222B3F), thickness = 1.dp)
-
-            // Quick Jump Section
+            // Quick Edit Tools Row
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
                     onClick = {
-                        viewModel.jumpStart()
                         onDismiss()
+                        viewModel.jumpStart()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C2438)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283E)),
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f).height(44.dp)
+                    modifier = Modifier.weight(1f).height(42.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Icon(
-                        Icons.Default.VerticalAlignTop,
-                        contentDescription = "Jump Top",
-                        tint = Color(0xFF8FA7D8),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Top",
-                        color = Color(0xFFECEFF8),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
+                    Text("TOP", color = Color(0xFFECEFF8), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
 
                 Button(
                     onClick = {
-                        viewModel.jumpEnd()
                         onDismiss()
+                        viewModel.jumpEnd()
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1C2438)),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283E)),
                     shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.weight(1f).height(44.dp)
+                    modifier = Modifier.weight(1f).height(42.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
-                    Icon(
-                        Icons.Default.VerticalAlignBottom,
-                        contentDescription = "Jump Bottom",
-                        tint = Color(0xFF8FA7D8),
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Bottom",
-                        color = Color(0xFFECEFF8),
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 13.sp
-                    )
+                    Text("END", color = Color(0xFFECEFF8), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        viewModel.selectAll()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E283E)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1.3f).height(42.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    Text("SELECT ALL", color = Color(0xFFECEFF8), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        viewModel.openVoiceReplacePopup()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.weight(1.2f).height(42.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp)
+                ) {
+                    Text("REPLACE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
+
+            HorizontalDivider(color = Color(0xFF222B3F), thickness = 1.dp)
 
             // Voice Language Picker & Settings
             Row(
@@ -222,68 +228,67 @@ private fun ControlToggleRow(
     isActive: Boolean,
     onToggle: () -> Unit
 ) {
-    val activeBg = Color(0xFF2563EB)
-    val activeBorder = Color(0xFF93C5FD)
-    val inactiveBg = Color(0xFF1E2638)
-    val inactiveBorder = Color(0xFF2E3850)
+    val activeColor = Color(0xFF3B82F6)
+    val inactiveBadgeBg = Color(0xFF1C2438)
+    val activeBadgeBg = activeColor.copy(alpha = 0.2f)
 
-    val badgeBg = if (isActive) activeBg else inactiveBg
-    val badgeBorder = if (isActive) activeBorder else inactiveBorder
-
-    Surface(
-        onClick = onToggle,
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFF182032),
-        modifier = Modifier.fillMaxWidth()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF161E30))
+            .border(1.dp, Color(0xFF222B3F), RoundedCornerShape(12.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (isActive) activeBadgeBg else inactiveBadgeBg)
+                .border(
+                    1.dp,
+                    if (isActive) activeColor else Color(0xFF2E3D5C),
+                    RoundedCornerShape(10.dp)
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(badgeBg)
-                    .border(1.dp, badgeBorder, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = badgeLetter,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = if (badgeLetter.length > 1) 12.sp else 16.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.width(14.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    color = Color(0xFFECEFF8),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = description,
-                    color = Color(0xFF8E9BB8),
-                    fontSize = 11.5.sp
-                )
-            }
-
-            Switch(
-                checked = isActive,
-                onCheckedChange = { onToggle() },
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Color(0xFF2563EB),
-                    uncheckedThumbColor = Color(0xFF8E9BB8),
-                    uncheckedTrackColor = Color(0xFF222B3F)
-                )
+            Text(
+                text = badgeLetter,
+                color = if (isActive) activeColor else Color(0xFF8FA7D8),
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
             )
         }
+
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFFECEFF8)
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = Color(0xFF6B7FA8)
+            )
+        }
+
+        Switch(
+            checked = isActive,
+            onCheckedChange = { onToggle() },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = activeColor,
+                uncheckedThumbColor = Color(0xFF8FA7D8),
+                uncheckedTrackColor = Color(0xFF1C2438)
+            )
+        )
     }
 }

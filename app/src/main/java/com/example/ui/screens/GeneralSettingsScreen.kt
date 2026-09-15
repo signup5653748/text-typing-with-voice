@@ -246,6 +246,92 @@ fun GeneralSettingsScreen(
                     }
                 }
             }
+
+            // Headings Display Settings Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Hide heading symbols",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFFECEFF8),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Visually hides leading ▫️ markers in rendered editor view without modifying saved file content.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF8FA7D8)
+                            )
+                        }
+
+                        Switch(
+                            checked = settings.hideHeadingSymbols,
+                            onCheckedChange = { viewModel.updateHideHeadingSymbols(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF2563EB),
+                                uncheckedThumbColor = Color(0xFF8FA7D8),
+                                uncheckedTrackColor = Color(0xFF243048)
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Always insert mic text directly Toggle Card
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text = "Always insert mic text directly",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFFECEFF8),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "When ON, mic clicks always insert speech directly at the caret. When OFF, mic clicks with an active selection open the Voice Replace popup.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF8FA7D8)
+                            )
+                        }
+
+                        Switch(
+                            checked = settings.alwaysInsertMicDirectly,
+                            onCheckedChange = { viewModel.updateAlwaysInsertMicDirectly(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF2563EB),
+                                uncheckedThumbColor = Color(0xFF8FA7D8),
+                                uncheckedTrackColor = Color(0xFF243048)
+                            )
+                        )
+                    }
+                }
+            }
         }
     }
 }

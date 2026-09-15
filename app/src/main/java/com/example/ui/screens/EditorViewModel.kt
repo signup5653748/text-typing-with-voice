@@ -1,8 +1,12 @@
 package com.example.ui.screens
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
 import android.provider.DocumentsContract
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
@@ -10,62 +14,58 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.ActionButton
-import com.example.data.ControlElement
+import com.example.data.SessionDraft
 import com.example.data.SettingsEntity
 import com.example.data.SettingsRepository
 import com.example.data.StarredFolder
 import com.example.logic.ArrowDirection
 import com.example.logic.CursorLogic
+import com.example.logic.HeadingItem
+import com.example.logic.HeadingLogic
 import com.example.speech.SpeechRecognitionWrapper
 import com.example.speech.TTSWrapper
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.UUID
 
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
-    private val settingsRepo = SettingsRepository(application)
-    
-    val speechWrapper = SpeechRecognitionWrapper(application)
+class EditorViewModel(
+    application: Application,
+    private val settingsRepo: SettingsRepository = SettingsRepository(application)
+) : AndroidViewModel(application) {
+
+    constructor(application: Application) : this(application, SettingsRepository(application))
+
     val ttsWrapper = TTSWrapper(application)
-
-    val settings = settingsRepo.settings.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        SettingsEntity()
-    )
-
-    val starredFolders = settingsRepo.starredFolders.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5000),
-        emptyList()
-    )
-
-    private val _showSaveDialog = MutableStateFlow(false)
-    val showSaveDialog: StateFlow<Boolean> = _showSaveDialog.asStateFlow()
-
-    private val _isSaveAsMode = MutableStateFlow(false)
-    val isSaveAsMode: StateFlow<Boolean> = _isSaveAsMode.asStateFlow()
+    val speechWrapper = SpeechRecognitionWrapper(application)
 
     private val _textValue = MutableStateFlow(TextFieldValue(""))
     val textValue: StateFlow<TextFieldValue> = _textValue.asStateFlow()
 
-    private val _showResumePopup = MutableStateFlow(false)
-    val showResumePopup: StateFlow<Boolean> = _showResumePopup.asStateFlow()
+    private val _currentFileUri = MutableStateFlow<Uri?>(null)
+    val currentFileUri: StateFlow<Uri?> = _currentFileUri.asStateFlow()
 
-    private val _savedDraft = MutableStateFlow<com.example.data.SessionDraft?>(null)
-    val savedDraft: StateFlow<com.example.data.SessionDraft?> = _savedDraft.asStateFlow()
+    private val _fileName = MutableStateFlow("newfile.txt")
+    val fileName: StateFlow<String> = _fileName.asStateFlow()
 
-    private val _transientHighlightRange = MutableStateFlow<TextRange?>(null)
-    val transientHighlightRange: StateFlow<TextRange?> = _transientHighlightRange.asStateFlow()
-
-    // Default: K is false -> word by word; when true -> character by character
     private val _kActive = MutableStateFlow(false)
     val kActive: StateFlow<Boolean> = _kActive.asStateFlow()
 
-    // Default: P is false -> line by line; when true -> paragraph by paragraph
     private val _pActive = MutableStateFlow(false)
     val pActive: StateFlow<Boolean> = _pActive.asStateFlow()
+
+    // Undo & Redo history stacks
+    private val undoStack = ArrayDeque<TextFieldValue>()
+    private val redoStack = ArrayDeque<TextFieldValue>()
+    private val _canUndo = MutableStateFlow(false)
+    val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+    private val _canRedo = MutableStateFlow(false)
+    val canRedo: StateFlow<Boolean> = _canRedo.asStateFlow()
+    private var isPerformingUndoRedo = false
 
     private val _selActive = MutableStateFlow(false)
     val selActive: StateFlow<Boolean> = _selActive.asStateFlow()
@@ -73,18 +73,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _kbLockActive = MutableStateFlow(false)
     val kbLockActive: StateFlow<Boolean> = _kbLockActive.asStateFlow()
 
-    private val _currentFileUri = MutableStateFlow<android.net.Uri?>(null)
-    val currentFileUri: StateFlow<android.net.Uri?> = _currentFileUri.asStateFlow()
-
-    private val _fileName = MutableStateFlow("newfile.txt")
-    val fileName: StateFlow<String> = _fileName.asStateFlow()
-
     private val _showReplacePopup = MutableStateFlow(false)
     val showReplacePopup: StateFlow<Boolean> = _showReplacePopup.asStateFlow()
 
     private val _showLanguagePicker = MutableStateFlow(false)
     val showLanguagePicker: StateFlow<Boolean> = _showLanguagePicker.asStateFlow()
 
+    private val _showSaveDialog = MutableStateFlow(false)
+    val showSaveDialog: StateFlow<Boolean> = _showSaveDialog.asStateFlow()
+
+    private val _isSaveAsMode = MutableStateFlow(false)
+    val isSaveAsMode: StateFlow<Boolean> = _isSaveAsMode.asStateFlow()
+
+    private val _showResumePopup = MutableStateFlow(false)
+    val showResumePopup: StateFlow<Boolean> = _showResumePopup.asStateFlow()
+
+    val savedDraft: StateFlow<SessionDraft?> = settingsRepo.sessionDraftFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = null
+    )
+
+    // Transient word/line highlight for TTS navigation readouts
+    private val _transientHighlightRange = MutableStateFlow<TextRange?>(null)
+    val transientHighlightRange: StateFlow<TextRange?> = _transientHighlightRange.asStateFlow()
+
+    // Search state
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -94,99 +108,102 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentMatchIndex = MutableStateFlow(-1)
     val currentMatchIndex: StateFlow<Int> = _currentMatchIndex.asStateFlow()
 
-    private var idealX: Float? = null
+    // Jump to state & in-memory session cache
+    private var cachedHeadings: List<HeadingItem>? = null
+    private val _showJumpToDialog = MutableStateFlow(false)
+    val showJumpToDialog: StateFlow<Boolean> = _showJumpToDialog.asStateFlow()
+
+    private val _jumpToHeadings = MutableStateFlow<List<HeadingItem>>(emptyList())
+    val jumpToHeadings: StateFlow<List<HeadingItem>> = _jumpToHeadings.asStateFlow()
+
+    private var isExplicitDocumentSession = false
+
+    val settings: StateFlow<SettingsEntity> = settingsRepo.settingsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = SettingsEntity()
+    )
+
+    val starredFolders: StateFlow<List<StarredFolder>> = settingsRepo.starredFoldersFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyList()
+    )
+
+    // State tracking for smooth navigation & selection
     private var selAnchor: Int? = null
+    private var idealX: Float? = null
 
     init {
+        // Collect recognized speech
         viewModelScope.launch {
             speechWrapper.finalResult.collect { result ->
-                if (result != null && !_showReplacePopup.value) {
-                    insertTextAtCursor(result + " ")
-                    speechWrapper.clearResults()
-                    ttsWrapper.speakFeedback(result)
-                }
-            }
-        }
-        
-        viewModelScope.launch {
-            ttsWrapper.currentRange.collect { range ->
-                if (range != null) {
-                    val current = _textValue.value
-                    _textValue.value = current.copy(selection = TextRange(range.first, range.second))
+                if (!result.isNullOrBlank()) {
+                    if (_showReplacePopup.value) {
+                        applyReplace(result)
+                    } else {
+                        insertTextAtCursor(result)
+                        ttsWrapper.speakFeedback(result)
+                    }
                 }
             }
         }
 
+        // Apply initial settings to TTS
         viewModelScope.launch {
-            settings.collect { s ->
-                ttsWrapper.setLanguage(s.ttsLanguage)
-                if (s.ttsEnginePackage.isNotBlank()) {
+            settingsRepo.settingsFlow.collect { s ->
+                ttsWrapper.setSpeechRate(s.ttsSpeed)
+                ttsWrapper.setPitch(s.ttsPitch)
+                if (s.ttsLanguage.isNotEmpty()) {
+                    ttsWrapper.setLanguage(s.ttsLanguage)
+                }
+                if (s.ttsEnginePackage.isNotEmpty()) {
                     ttsWrapper.setEngine(s.ttsEnginePackage)
                 }
             }
         }
 
+        // Check for session restore - only on fresh launch when no explicit document has been opened
         viewModelScope.launch {
-            val draft = settingsRepo.lastSessionDraft.first()
-            if (draft.text.isNotBlank()) {
-                _savedDraft.value = draft
-                _showResumePopup.value = true
+            settingsRepo.sessionDraftFlow.collect { draft ->
+                if (draft != null && draft.text.isNotBlank() && _textValue.value.text.isEmpty() && !isExplicitDocumentSession) {
+                    _showResumePopup.value = true
+                }
             }
         }
-    }
-
-    private var persistJob: kotlinx.coroutines.Job? = null
-    private fun persistDraft() {
-        persistJob?.cancel()
-        persistJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(400)
-            settingsRepo.saveSessionDraft(
-                com.example.data.SessionDraft(
-                    text = _textValue.value.text,
-                    fileName = _fileName.value,
-                    uriString = _currentFileUri.value?.toString() ?: "",
-                    selectionStart = _textValue.value.selection.start,
-                    selectionEnd = _textValue.value.selection.end
-                )
-            )
-        }
-    }
-
-    fun startNewDocument() {
-        _textValue.value = TextFieldValue("")
-        _fileName.value = "newfile.txt"
-        _currentFileUri.value = null
-        _showResumePopup.value = false
-        resetCursorState()
-        viewModelScope.launch {
-            settingsRepo.clearSessionDraft()
-        }
-        ttsWrapper.speakFeedback("New blank document")
     }
 
     fun keepEditingDraft() {
-        val draft = _savedDraft.value
+        val draft = savedDraft.value
         if (draft != null) {
-            val clampedStart = draft.selectionStart.coerceIn(0, draft.text.length)
-            val clampedEnd = draft.selectionEnd.coerceIn(0, draft.text.length)
-            _textValue.value = TextFieldValue(draft.text, TextRange(clampedStart, clampedEnd))
-            _fileName.value = if (draft.fileName.isNotBlank()) draft.fileName else "newfile.txt"
+            _textValue.value = TextFieldValue(
+                text = draft.text,
+                selection = TextRange(
+                    draft.selectionStart.coerceIn(0, draft.text.length),
+                    draft.selectionEnd.coerceIn(0, draft.text.length)
+                )
+            )
+            _fileName.value = draft.fileName
             if (draft.uriString.isNotBlank()) {
                 _currentFileUri.value = Uri.parse(draft.uriString)
-            } else {
-                _currentFileUri.value = null
             }
-            ttsWrapper.speakFeedback("Draft restored")
+            ttsWrapper.speakFeedback("Resumed draft")
         }
         _showResumePopup.value = false
     }
 
     fun openLastSavedFile() {
-        val draft = _savedDraft.value
+        val draft = savedDraft.value
         if (draft != null && draft.uriString.isNotBlank()) {
             loadFromUri(Uri.parse(draft.uriString))
-        } else {
-            keepEditingDraft()
+        }
+        _showResumePopup.value = false
+    }
+
+    fun startNewDocument() {
+        newFile()
+        viewModelScope.launch {
+            settingsRepo.clearSessionDraft()
         }
         _showResumePopup.value = false
     }
@@ -197,14 +214,76 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onTextChanged(newValue: TextFieldValue) {
         if (_textValue.value == newValue) return
-        _textValue.value = newValue
-        if (_selActive.value) {
-            _selActive.value = false
+        val oldVal = _textValue.value
+        val oldText = oldVal.text
+        if (newValue.text != oldText && !isPerformingUndoRedo) {
+            recordSnapshot(oldVal)
         }
-        selAnchor = null
-        idealX = null
-        _transientHighlightRange.value = null
+        _textValue.value = newValue
+        if (newValue.text != oldText) {
+            cachedHeadings = null // Invalidate session cache on document edit
+            if (_selActive.value) {
+                _selActive.value = false
+            }
+            selAnchor = null
+            idealX = null
+            _transientHighlightRange.value = null
+            persistDraft()
+        } else {
+            // Text is unchanged - cursor moved or text was selected via touch
+            if (newValue.selection.start != newValue.selection.end) {
+                _selActive.value = true
+                selAnchor = newValue.selection.start
+            }
+        }
+    }
+
+    private fun recordSnapshot(snapshot: TextFieldValue) {
+        undoStack.addLast(snapshot)
+        if (undoStack.size > 100) {
+            undoStack.removeFirst()
+        }
+        redoStack.clear()
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
+    }
+
+    fun undo() {
+        if (undoStack.isEmpty()) {
+            ttsWrapper.speakFeedback("Nothing to undo")
+            return
+        }
+        val current = _textValue.value
+        redoStack.addLast(current)
+        val prev = undoStack.removeLast()
+        isPerformingUndoRedo = true
+        _textValue.value = prev
+        cachedHeadings = null
+        resetCursorState()
         persistDraft()
+        isPerformingUndoRedo = false
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
+        ttsWrapper.speakFeedback("Undo")
+    }
+
+    fun redo() {
+        if (redoStack.isEmpty()) {
+            ttsWrapper.speakFeedback("Nothing to redo")
+            return
+        }
+        val current = _textValue.value
+        undoStack.addLast(current)
+        val next = redoStack.removeLast()
+        isPerformingUndoRedo = true
+        _textValue.value = next
+        cachedHeadings = null
+        resetCursorState()
+        persistDraft()
+        isPerformingUndoRedo = false
+        _canUndo.value = undoStack.isNotEmpty()
+        _canRedo.value = redoStack.isNotEmpty()
+        ttsWrapper.speakFeedback("Redo")
     }
 
     // Toggle K without resetting active selection
@@ -222,28 +301,39 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     
     fun toggleSel() { 
-        val newSel = !_selActive.value
-        _selActive.value = newSel
         val current = _textValue.value
-        if (newSel) {
-            // Lock anchor at current caret position
-            selAnchor = current.selection.end
-            _transientHighlightRange.value = null
-            _textValue.value = current.copy(
-                selection = TextRange(selAnchor!!, selAnchor!!),
-                composition = null
-            )
-            ttsWrapper.speakFeedback("Selection mode on")
-        } else {
-            // Deselect: return cursor to normal single caret
+        val hasText = current.text.isNotEmpty()
+        val hasSelection = current.selection.start != current.selection.end
+
+        if (_selActive.value) {
+            // Turn off selection mode and collapse selection to current cursor
+            _selActive.value = false
             selAnchor = null
-            val caret = current.selection.end
+            val caret = current.selection.end.coerceIn(0, current.text.length)
             _textValue.value = current.copy(
                 selection = TextRange(caret, caret),
                 composition = null
             )
             _transientHighlightRange.value = null
             ttsWrapper.speakFeedback("Selection mode off")
+        } else {
+            // Turn on selection mode
+            _selActive.value = true
+            _transientHighlightRange.value = null
+            if (hasSelection) {
+                // Keep current selection and set anchor to the starting point
+                selAnchor = current.selection.start
+                ttsWrapper.speakFeedback("Selection mode on")
+            } else {
+                // Lock anchor at current caret position
+                val caret = current.selection.end.coerceIn(0, current.text.length)
+                selAnchor = caret
+                _textValue.value = current.copy(
+                    selection = TextRange(caret, caret),
+                    composition = null
+                )
+                ttsWrapper.speakFeedback("Selection mode on")
+            }
         }
     }
     
@@ -252,31 +342,52 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _kbLockActive.value = newVal
         ttsWrapper.speakFeedback(if (newVal) "Keyboard locked" else "Keyboard unlocked")
     }
-    
-    fun togglePlay() {
-        if (ttsWrapper.isPlaying.value) {
-            ttsWrapper.stop()
-        } else {
-            val current = _textValue.value
-            val start = current.selection.min
-            ttsWrapper.play(current.text, start)
+
+    fun openLanguagePicker() {
+        _showLanguagePicker.value = true
+    }
+
+    fun closeLanguagePicker() {
+        _showLanguagePicker.value = false
+    }
+
+    fun setLanguage(langCode: String) {
+        viewModelScope.launch {
+            settingsRepo.updateVoiceLanguage(langCode)
+            settingsRepo.updateTtsLanguage(langCode)
+            ttsWrapper.setLanguage(langCode)
+            closeLanguagePicker()
+            ttsWrapper.speakFeedback("Voice and read language set to $langCode")
         }
     }
 
-    fun openLanguagePicker() { _showLanguagePicker.value = true }
-    fun closeLanguagePicker() { _showLanguagePicker.value = false }
-    fun setLanguage(language: String) {
+    fun updateTtsLanguage(langCode: String) {
         viewModelScope.launch {
-            settingsRepo.updateVoiceLanguage(language)
-            settingsRepo.updateTtsLanguage(language)
-            ttsWrapper.setLanguage(language)
-            closeLanguagePicker()
-            val locName = try {
-                java.util.Locale.forLanguageTag(language).displayName.ifBlank { language }
-            } catch (_: Exception) {
-                language
-            }
-            ttsWrapper.speakFeedback("Language set to $locName")
+            settingsRepo.updateTtsLanguage(langCode)
+            ttsWrapper.setLanguage(langCode)
+            ttsWrapper.speakFeedback("TTS set to $langCode")
+        }
+    }
+
+    fun updateTtsEngine(enginePkg: String) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsEnginePackage(enginePkg)
+            ttsWrapper.setEngine(enginePkg)
+            ttsWrapper.speakFeedback("TTS engine updated")
+        }
+    }
+
+    fun updateSpeed(speed: Float) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsSpeed(speed)
+            ttsWrapper.setSpeechRate(speed)
+        }
+    }
+
+    fun updatePitch(pitch: Float) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsPitch(pitch)
+            ttsWrapper.setPitch(pitch)
         }
     }
 
@@ -286,21 +397,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateHighlightColor(colorHex: Long) {
+    fun updateHighlightColor(hex: Long) {
         viewModelScope.launch {
-            settingsRepo.updateHighlightColor(colorHex)
+            settingsRepo.updateHighlightColor(hex)
         }
     }
 
-    fun updateBackgroundColor(colorHex: Long) {
+    fun updateBackgroundColor(hex: Long) {
         viewModelScope.launch {
-            settingsRepo.updateBackgroundColor(colorHex)
+            settingsRepo.updateBackgroundColor(hex)
         }
     }
 
-    fun updateTextColor(colorHex: Long) {
+    fun updateTextColor(hex: Long) {
         viewModelScope.launch {
-            settingsRepo.updateTextColor(colorHex)
+            settingsRepo.updateTextColor(hex)
         }
     }
 
@@ -310,17 +421,43 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateTtsLanguage(language: String) {
+    fun updateHideHeadingSymbols(hide: Boolean) {
         viewModelScope.launch {
-            settingsRepo.updateTtsLanguage(language)
-            ttsWrapper.setLanguage(language)
+            settingsRepo.updateHideHeadingSymbols(hide)
         }
     }
 
-    fun updateTtsEngine(pkg: String) {
+    fun openJumpTo() {
+        // Scan document only on first tap for the current open file session
+        if (cachedHeadings == null) {
+            cachedHeadings = HeadingLogic.scanHeadings(_textValue.value.text)
+        }
+        _jumpToHeadings.value = cachedHeadings ?: emptyList()
+        _showJumpToDialog.value = true
+    }
+
+    fun closeJumpTo() {
+        _showJumpToDialog.value = false
+    }
+
+    fun jumpToHeading(item: HeadingItem) {
+        val docText = _textValue.value.text
+        val targetPos = item.textStartOffset.coerceIn(0, docText.length)
+        _textValue.value = _textValue.value.copy(
+            selection = TextRange(targetPos, targetPos),
+            composition = null
+        )
+        _selActive.value = false
+        selAnchor = null
+        idealX = null
+        _transientHighlightRange.value = CursorLogic.getWordRangeAt(docText, targetPos)
+        _showJumpToDialog.value = false
+        ttsWrapper.speakFeedback("Jumped to ${item.headingText}")
+    }
+
+    fun updateButtonOrder(order: List<ActionButton>) {
         viewModelScope.launch {
-            settingsRepo.updateTtsEnginePackage(pkg)
-            ttsWrapper.setEngine(pkg)
+            settingsRepo.updateButtonOrder(order)
         }
     }
 
@@ -330,63 +467,113 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateButtonOrder(order: List<ActionButton>) {
+    fun updateArrowSize(scale: Float) {
         viewModelScope.launch {
-            settingsRepo.updateButtonOrder(order)
+            settingsRepo.updateArrowSize(scale)
         }
     }
 
-    fun updateElementLayoutOrder(order: List<String>) {
+    fun updateAlwaysInsertMicDirectly(always: Boolean) {
         viewModelScope.launch {
-            settingsRepo.updateElementLayoutOrder(order)
+            settingsRepo.updateAlwaysInsertMicDirectly(always)
         }
     }
 
-    fun toggleElementVisibility(elementName: String) {
-        viewModelScope.launch {
-            settingsRepo.toggleElementVisibility(elementName)
-        }
+    fun setCaretFromTap(offset: Int) {
+        val text = _textValue.value.text
+        val safeOffset = offset.coerceIn(0, text.length)
+        _textValue.value = _textValue.value.copy(
+            selection = TextRange(safeOffset, safeOffset),
+            composition = null
+        )
+        _selActive.value = false
+        selAnchor = null
+        idealX = null
+        _transientHighlightRange.value = null
     }
 
-    fun updateArrowSize(size: Float) {
-        viewModelScope.launch {
-            settingsRepo.updateArrowSize(size)
-        }
-    }
-
-    fun loadFromUri(uri: android.net.Uri) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            try {
-                val context = getApplication<Application>()
-                try {
-                    context.contentResolver.takePersistableUriPermission(
-                        uri,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-                    )
-                } catch (e: Exception) {}
-                
-                context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                    val text = inputStream.bufferedReader().readText()
-                    _textValue.value = TextFieldValue(text)
-                    _currentFileUri.value = uri
-                    _fileName.value = getFileName(context.contentResolver, uri) ?: "unknown.txt"
-                    resetCursorState()
-                    ttsWrapper.speakFeedback("File opened")
+    fun togglePlay() {
+        if (ttsWrapper.isPlaying.value) {
+            ttsWrapper.stop()
+        } else {
+            val text = _textValue.value.text
+            if (text.isNotBlank()) {
+                val start = _textValue.value.selection.min
+                val textToRead = if (_textValue.value.selection.length > 0) {
+                    text.substring(_textValue.value.selection.min, _textValue.value.selection.max)
+                } else {
+                    text.substring(start)
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
+                // Strip leading heading square symbols so TTS never reads them aloud
+                val sanitizedTextToRead = HeadingLogic.stripHeadingSymbolsForTTS(textToRead)
+                ttsWrapper.play(sanitizedTextToRead, 0)
+            } else {
+                ttsWrapper.speakFeedback("Document is empty")
             }
         }
     }
 
-    fun saveToUri(uri: android.net.Uri) {
+    fun selectAll() {
+        val len = _textValue.value.text.length
+        if (len > 0) {
+            _selActive.value = true
+            selAnchor = 0
+            _textValue.value = _textValue.value.copy(
+                selection = TextRange(0, len),
+                composition = null
+            )
+            _transientHighlightRange.value = null
+            idealX = null
+            ttsWrapper.speakFeedback("Selected all")
+        } else {
+            ttsWrapper.speakFeedback("Document is empty")
+        }
+    }
+
+    fun loadFromUri(uri: Uri, isFromExternalOrExplicitOpen: Boolean = true) {
+        if (isFromExternalOrExplicitOpen) {
+            isExplicitDocumentSession = true
+            _showResumePopup.value = false
+        }
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 val context = getApplication<Application>()
                 try {
                     context.contentResolver.takePersistableUriPermission(
                         uri,
-                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (e: Exception) {}
+
+                val text = context.contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.bufferedReader().readText()
+                } ?: ""
+                
+                cachedHeadings = null
+                undoStack.clear()
+                redoStack.clear()
+                _canUndo.value = false
+                _canRedo.value = false
+                _textValue.value = TextFieldValue(text = text, selection = TextRange(0, 0))
+                _currentFileUri.value = uri
+                _fileName.value = getFileName(context.contentResolver, uri) ?: "document.txt"
+                resetCursorState()
+                ttsWrapper.speakFeedback("Opened ${_fileName.value}")
+            } catch (e: Exception) {
+                e.printStackTrace()
+                ttsWrapper.speakFeedback("Error opening file")
+            }
+        }
+    }
+
+    fun saveToUri(uri: Uri) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
                 } catch (e: Exception) {}
                 
@@ -532,6 +719,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newFile() {
+        isExplicitDocumentSession = true
+        _showResumePopup.value = false
+        cachedHeadings = null
+        undoStack.clear()
+        redoStack.clear()
+        _canUndo.value = false
+        _canRedo.value = false
         _textValue.value = TextFieldValue("")
         _currentFileUri.value = null
         _fileName.value = "newfile.txt"
@@ -539,7 +733,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         ttsWrapper.speakFeedback("New file")
     }
 
-    private fun getFileName(contentResolver: android.content.ContentResolver, uri: android.net.Uri): String? {
+    private fun getFileName(contentResolver: android.content.ContentResolver, uri: Uri): String? {
         var result: String? = null
         if (uri.scheme == "content") {
             try {
@@ -588,11 +782,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun applyReplace(newText: String) {
         val current = _textValue.value
+        recordSnapshot(current)
         val start = current.selection.min
         val end = current.selection.max
         val newString = current.text.substring(0, start) + newText + current.text.substring(end)
         _textValue.value = current.copy(text = newString, selection = TextRange(start + newText.length), composition = null)
+        cachedHeadings = null
         resetCursorState()
+        persistDraft()
         closeReplacePopup()
         if (newText.isNotBlank()) {
             ttsWrapper.speakFeedback(newText)
@@ -603,11 +800,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun insertTextAtCursor(textToInsert: String) {
         val current = _textValue.value
+        recordSnapshot(current)
         val start = current.selection.min
         val end = current.selection.max
         val newString = current.text.substring(0, start) + textToInsert + current.text.substring(end)
         _textValue.value = current.copy(text = newString, selection = TextRange(start + textToInsert.length), composition = null)
+        cachedHeadings = null
         resetCursorState()
+        persistDraft()
     }
 
     private fun resetCursorState() {
@@ -680,25 +880,33 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             ',' -> "Comma"
                             '!' -> "Exclamation mark"
                             '?' -> "Question mark"
-                            ';' -> "Semicolon"
                             ':' -> "Colon"
-                            '-' -> "Dash"
-                            '_' -> "Underscore"
-                            '/' -> "Slash"
-                            '\\' -> "Backslash"
+                            ';' -> "Semicolon"
+                            '-' -> "Hyphen"
                             '(' -> "Open parenthesis"
                             ')' -> "Close parenthesis"
                             '\"' -> "Quote"
                             '\'' -> "Apostrophe"
-                            else -> if (ch.isLetterOrDigit()) ch.toString() else "Symbol $ch"
+                            '/' -> "Slash"
+                            '\\' -> "Backslash"
+                            '@' -> "At sign"
+                            '#' -> "Hash"
+                            '$' -> "Dollar"
+                            '%' -> "Percent"
+                            '&' -> "Ampersand"
+                            '*' -> "Asterisk"
+                            '+' -> "Plus"
+                            '=' -> "Equals"
+                            '<' -> "Less than"
+                            '>' -> "Greater than"
+                            else -> ch.toString()
                         }
                         ttsWrapper.speakFeedback(spoken)
                     }
                 } else {
-                    val wordIdx = if (direction == ArrowDirection.LEFT) newCaret else (newCaret - 1).coerceAtLeast(0)
-                    val range = CursorLogic.getWordRangeAt(text, wordIdx)
-                    val word = if (range.start < range.end && range.end <= text.length) {
-                        text.substring(range.start, range.end).trim()
+                    val wordRange = CursorLogic.getWordRangeAt(text, if (direction == ArrowDirection.LEFT) newCaret else (newCaret - 1).coerceAtLeast(0))
+                    val word = if (wordRange.start < wordRange.end && wordRange.end <= text.length) {
+                        text.substring(wordRange.start, wordRange.end).trim()
                     } else ""
                     if (word.isNotBlank()) {
                         ttsWrapper.speakFeedback(word)
@@ -713,8 +921,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     val pText = if (pRange.start < pRange.end && pRange.end <= text.length) {
                         text.substring(pRange.start, pRange.end).trim()
                     } else ""
-                    if (pText.isNotBlank()) {
-                        ttsWrapper.speakFeedback(pText)
+                    val cleanPText = HeadingLogic.stripLeadingSymbols(pText)
+                    if (cleanPText.isNotBlank()) {
+                        val sample = if (cleanPText.length > 60) cleanPText.substring(0, 60) + "..." else cleanPText
+                        ttsWrapper.speakFeedback(sample)
                     } else {
                         ttsWrapper.speakFeedback("Blank paragraph")
                     }
@@ -728,8 +938,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     val lineText = if (lineRange.start < lineRange.end && lineRange.end <= text.length) {
                         text.substring(lineRange.start, lineRange.end).trim()
                     } else ""
-                    if (lineText.isNotBlank()) {
-                        ttsWrapper.speakFeedback(lineText)
+                    val cleanLineText = HeadingLogic.stripLeadingSymbols(lineText)
+                    if (cleanLineText.isNotBlank()) {
+                        ttsWrapper.speakFeedback(cleanLineText)
                     } else {
                         ttsWrapper.speakFeedback("Blank line")
                     }
@@ -777,36 +988,74 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         when (action) {
             ActionButton.K -> toggleK()
             ActionButton.P -> toggleP()
+            ActionButton.KB_LOCK -> toggleKbLock()
+            ActionButton.SELECT_ALL -> selectAll()
+            ActionButton.JUMP_TO -> openJumpTo()
+            ActionButton.TOP -> jumpStart()
+            ActionButton.END -> jumpEnd()
+            ActionButton.REPLACE -> openVoiceReplacePopup()
+            ActionButton.MORE -> {
+                // Handled via onMoreClick or caller
+            }
             else -> {
+                val current = _textValue.value
+                val hasSelection = current.selection.start != current.selection.end
                 val clipboardText = if (action == ActionButton.PASTE) pasteFromClipboard() else null
-                _textValue.value = com.example.logic.TextActionLogic.handleAction(
+                
+                val result = com.example.logic.TextActionLogic.handleAction(
                     action = action,
-                    currentValue = _textValue.value,
+                    currentValue = current,
                     clipboardText = clipboardText,
                     onCopy = { copyToClipboard(it) }
                 )
+                if (result.text != current.text) {
+                    recordSnapshot(current)
+                }
+                _textValue.value = result
+                persistDraft()
+
                 when (action) {
-                    ActionButton.CUT -> ttsWrapper.speakFeedback("Cut")
-                    ActionButton.COPY -> ttsWrapper.speakFeedback("Copied")
-                    ActionButton.DELETE -> ttsWrapper.speakFeedback("Deleted")
-                    ActionButton.PASTE -> ttsWrapper.speakFeedback("Pasted")
+                    ActionButton.CUT -> {
+                        if (hasSelection) {
+                            ttsWrapper.speakFeedback("Cut")
+                        } else {
+                            ttsWrapper.speakFeedback("Nothing selected to cut")
+                        }
+                    }
+                    ActionButton.COPY -> {
+                        if (hasSelection) {
+                            ttsWrapper.speakFeedback("Copied")
+                        } else {
+                            ttsWrapper.speakFeedback("Nothing selected to copy")
+                        }
+                    }
+                    ActionButton.DELETE -> {
+                        ttsWrapper.speakFeedback("Deleted")
+                    }
+                    ActionButton.PASTE -> {
+                        if (!clipboardText.isNullOrEmpty()) {
+                            ttsWrapper.speakFeedback("Pasted")
+                        } else {
+                            ttsWrapper.speakFeedback("Clipboard is empty")
+                        }
+                    }
                     ActionButton.ENTER -> ttsWrapper.speakFeedback("Enter")
                     else -> {}
                 }
-                // Always return cursor to a normal single caret after Cut, Copy, Delete, Paste, Enter
+                
                 resetCursorState()
             }
         }
     }
 
     fun copyToClipboard(text: String) {
-        val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        val clip = android.content.ClipData.newPlainText("VoiceType", text)
+        val clipboard = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("VoiceType", text)
         clipboard.setPrimaryClip(clip)
     }
 
     fun pasteFromClipboard(): String {
-        val clipboard = getApplication<Application>().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        val clipboard = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (clipboard.hasPrimaryClip()) {
             val item = clipboard.primaryClip?.getItemAt(0)
             return item?.text?.toString() ?: ""
@@ -882,6 +1131,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _searchMatches.value = emptyList()
         _currentMatchIndex.value = -1
         ttsWrapper.stop()
+    }
+
+    private fun persistDraft() {
+        viewModelScope.launch {
+            val cur = _textValue.value
+            settingsRepo.saveSessionDraft(
+                SessionDraft(
+                    text = cur.text,
+                    fileName = _fileName.value,
+                    uriString = _currentFileUri.value?.toString() ?: "",
+                    selectionStart = cur.selection.start,
+                    selectionEnd = cur.selection.end
+                )
+            )
+        }
     }
     
     override fun onCleared() {

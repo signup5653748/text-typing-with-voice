@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
@@ -41,58 +43,72 @@ fun ArrowKeyCluster(
     activeHighlightColor: Color = Color(0xFFFFD600),
     modifier: Modifier = Modifier
 ) {
-    val baseSize = (48.dp * scale).coerceAtLeast(36.dp)
-    val spacing = 5.dp
+    val spacing = 6.dp
 
     Column(
-        modifier = modifier.width(IntrinsicSize.Min),
+        modifier = modifier.fillMaxHeight(),
         verticalArrangement = Arrangement.spacedBy(spacing),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top row: Up Arrow
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
-            Spacer(modifier = Modifier.size(baseSize))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
             ArrowIconButton(
                 icon = Icons.Default.KeyboardArrowUp,
                 contentDesc = "Move Up",
                 onClick = onMoveUp,
-                size = baseSize
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
-            Spacer(modifier = Modifier.size(baseSize))
+            Spacer(modifier = Modifier.weight(1f))
         }
 
         // Middle row: Left Arrow, SEL, Right Arrow
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(spacing)
+        ) {
             ArrowIconButton(
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 contentDesc = "Move Left",
                 onClick = onMoveLeft,
-                size = baseSize
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
             SelCenterButton(
                 isActive = selActive,
                 activeColor = activeHighlightColor,
                 onClick = onToggleSel,
-                size = baseSize
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
             ArrowIconButton(
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDesc = "Move Right",
                 onClick = onMoveRight,
-                size = baseSize
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
 
         // Bottom row: Down Arrow
-        Row(horizontalArrangement = Arrangement.spacedBy(spacing)) {
-            Spacer(modifier = Modifier.size(baseSize))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
             ArrowIconButton(
                 icon = Icons.Default.KeyboardArrowDown,
                 contentDesc = "Move Down",
                 onClick = onMoveDown,
-                size = baseSize
+                modifier = Modifier.weight(1f).fillMaxHeight()
             )
-            Spacer(modifier = Modifier.size(baseSize))
+            Spacer(modifier = Modifier.weight(1f))
         }
     }
 }
@@ -102,14 +118,14 @@ private fun ArrowIconButton(
     icon: ImageVector,
     contentDesc: String,
     onClick: () -> Unit,
-    size: androidx.compose.ui.unit.Dp
+    modifier: Modifier = Modifier
 ) {
     val bgColor = Color(0xFF182032)
     val iconColor = Color(0xFF8FA7D8)
 
     Box(
-        modifier = Modifier
-            .size(size)
+        modifier = modifier
+            .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .instantClickable(onClick = onClick),
@@ -119,7 +135,7 @@ private fun ArrowIconButton(
             imageVector = icon,
             contentDescription = contentDesc,
             tint = iconColor,
-            modifier = Modifier.size((size.value * 0.58f).dp)
+            modifier = Modifier.size(24.dp)
         )
     }
 }
@@ -129,7 +145,7 @@ private fun SelCenterButton(
     isActive: Boolean,
     activeColor: Color,
     onClick: () -> Unit,
-    size: androidx.compose.ui.unit.Dp
+    modifier: Modifier = Modifier
 ) {
     val bgColor = if (isActive) activeColor else Color(0xFF182032)
     val textColor = if (isActive) Color(0xFF0D111A) else Color(0xFF8FA7D8)
@@ -140,8 +156,8 @@ private fun SelCenterButton(
     }
 
     Box(
-        modifier = Modifier
-            .size(size)
+        modifier = modifier
+            .fillMaxHeight()
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
             .then(borderModifier)
@@ -152,7 +168,7 @@ private fun SelCenterButton(
             text = "SEL",
             color = textColor,
             fontWeight = FontWeight.Bold,
-            fontSize = 12.5.sp,
+            fontSize = 12.sp,
             letterSpacing = 0.5.sp
         )
     }
@@ -160,6 +176,7 @@ private fun SelCenterButton(
 
 @Composable
 fun Modifier.instantClickable(onClick: () -> Unit): Modifier {
+    val currentOnClick by androidx.compose.runtime.rememberUpdatedState(onClick)
     val interactionSource = remember { MutableInteractionSource() }
     val coroutineScope = rememberCoroutineScope()
     return this
@@ -169,7 +186,7 @@ fun Modifier.instantClickable(onClick: () -> Unit): Modifier {
                 onPress = { offset ->
                     val press = PressInteraction.Press(offset)
                     coroutineScope.launch { interactionSource.emit(press) }
-                    onClick()
+                    currentOnClick()
                     tryAwaitRelease()
                     coroutineScope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                 }

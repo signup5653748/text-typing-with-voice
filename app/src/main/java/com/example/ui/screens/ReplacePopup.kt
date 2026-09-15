@@ -8,6 +8,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,8 +16,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Backspace
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardReturn
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +33,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
@@ -36,13 +44,23 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import com.example.data.ActionButton
 import com.example.logic.ArrowDirection
 import com.example.logic.CursorLogic
-import com.example.ui.components.ActionButtonGrid
 import com.example.ui.components.ArrowKeyCluster
 import com.example.ui.components.SelectionHighlightTransformation
 import kotlinx.coroutines.delay
+
+private val PopupEmptyTextToolbar = object : TextToolbar {
+    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+    override fun hide() {}
+    override fun showMenu(
+        rect: androidx.compose.ui.geometry.Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?
+    ) {}
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +73,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
     var previewText by remember { mutableStateOf(TextFieldValue("")) }
     var transientHighlight by remember { mutableStateOf<TextRange?>(null) }
 
-    // When final result arrives: set text and automatically read aloud
+    // When final result arrives: append/insert text and automatically read aloud
     LaunchedEffect(finalResult) {
         if (finalResult != null && finalResult!!.isNotBlank()) {
             val textToInsert = finalResult!!.trim()
@@ -64,9 +82,14 @@ fun ReplacePopup(viewModel: EditorViewModel) {
             val newString = if (previewText.text.isEmpty()) {
                 textToInsert
             } else {
-                previewText.text.substring(0, start) + textToInsert + previewText.text.substring(end)
+                val prefix = previewText.text.substring(0, start)
+                val suffix = previewText.text.substring(end)
+                // Add a space between words if needed
+                val needsLeadingSpace = prefix.isNotEmpty() && !prefix.endsWith(" ") && !prefix.endsWith("\n")
+                val textWithSpace = if (needsLeadingSpace) " $textToInsert" else textToInsert
+                prefix + textWithSpace + suffix
             }
-            previewText = TextFieldValue(newString, TextRange(start + textToInsert.length))
+            previewText = TextFieldValue(newString, TextRange(newString.length))
             transientHighlight = null
             // Automatically speak out the captured transcription for audible verification
             viewModel.ttsWrapper.speakFeedback(textToInsert)
@@ -75,12 +98,10 @@ fun ReplacePopup(viewModel: EditorViewModel) {
     }
 
     var kActive by remember { mutableStateOf(false) }
-    var pActive by remember { mutableStateOf(false) }
     var selActive by remember { mutableStateOf(false) }
     var selAnchor by remember { mutableStateOf<Int?>(null) }
     var idealX by remember { mutableStateOf<Float?>(null) }
     var layoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
-    var showPopupMoreSheet by remember { mutableStateOf(false) }
 
     // Caret blink animation
     val cursorAlpha = remember { Animatable(1f) }
@@ -94,10 +115,10 @@ fun ReplacePopup(viewModel: EditorViewModel) {
         }
     }
 
-    // Pulse animation for recording badge
+    // Pulse animation for recording badge and mic button
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
+        initialValue = 0.9f,
         targetValue = 1.25f,
         animationSpec = infiniteRepeatable(
             animation = tween(600, easing = FastOutSlowInEasing),
@@ -116,10 +137,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
         }
     }
 
-    val highlightColor = Color(settings.highlightColorHex)
-    val buttonOrderList = remember(settings.buttonOrder) {
-        settings.buttonOrder.split(",").filter { it.isNotBlank() }
-    }
+    val highlightColor = remember(settings.highlightColorHex) { Color(settings.highlightColorHex) }
 
     fun handleArrow(direction: ArrowDirection) {
         val prevCaret = previewText.selection.end
@@ -127,7 +145,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
             value = previewText,
             direction = direction,
             isCharacterMode = kActive,
-            isParagraphMode = pActive,
+            isParagraphMode = false,
             isSelActive = selActive,
             layoutResult = layoutResult,
             currentIdealX = idealX,
@@ -170,6 +188,40 @@ fun ReplacePopup(viewModel: EditorViewModel) {
         }
     }
 
+    fun handleDelete() {
+        val current = previewText
+        val text = current.text
+        if (text.isEmpty()) return
+        val start = current.selection.min
+        val end = current.selection.max
+        if (start != end) {
+            val newText = text.substring(0, start) + text.substring(end)
+            previewText = current.copy(text = newText, selection = TextRange(start, start))
+        } else if (start > 0) {
+            val newText = text.substring(0, start - 1) + text.substring(start)
+            previewText = current.copy(text = newText, selection = TextRange(start - 1, start - 1))
+        }
+        selActive = false
+        selAnchor = null
+        idealX = null
+        transientHighlight = null
+        viewModel.ttsWrapper.speakFeedback("Deleted")
+    }
+
+    fun handleEnter() {
+        val current = previewText
+        val text = current.text
+        val start = current.selection.min
+        val end = current.selection.max
+        val newText = text.substring(0, start) + "\n" + text.substring(end)
+        previewText = current.copy(text = newText, selection = TextRange(start + 1, start + 1))
+        selActive = false
+        selAnchor = null
+        idealX = null
+        transientHighlight = null
+        viewModel.ttsWrapper.speakFeedback("Enter")
+    }
+
     ModalBottomSheet(
         onDismissRequest = { viewModel.closeReplacePopup() },
         containerColor = Color(0xFF141926),
@@ -178,7 +230,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 16.dp, vertical = 6.dp)
         ) {
             // Header with status indicator
             Row(
@@ -227,7 +279,7 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                 }
 
                 IconButton(onClick = { viewModel.closeReplacePopup() }) {
-                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color(0xFF8FA7D8))
+                    Icon(Icons.Default.Close, contentDescription = "Cancel and Close", tint = Color(0xFF8FA7D8))
                 }
             }
 
@@ -238,10 +290,10 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black)
-                    .border(1.dp, if (isListening) Color(0xFF56D0DE) else Color(0xFF242E44), RoundedCornerShape(10.dp))
-                    .padding(12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFF0C0D10))
+                    .border(1.5.dp, if (isListening) Color(0xFF56D0DE) else Color(0xFF242E44), RoundedCornerShape(12.dp))
+                    .padding(14.dp)
             ) {
                 if (previewText.text.isEmpty()) {
                     if (isListening && partialResults.isNotBlank()) {
@@ -261,11 +313,16 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                     }
                 }
 
-                val brightSelection = TextSelectionColors(
-                    handleColor = highlightColor,
-                    backgroundColor = highlightColor.copy(alpha = 0.55f)
-                )
-                CompositionLocalProvider(LocalTextSelectionColors provides brightSelection) {
+                val invisibleSelectionColors = remember {
+                    TextSelectionColors(
+                        handleColor = Color.Transparent,
+                        backgroundColor = Color.Transparent
+                    )
+                }
+                CompositionLocalProvider(
+                    LocalTextSelectionColors provides invisibleSelectionColors,
+                    LocalTextToolbar provides PopupEmptyTextToolbar
+                ) {
                     BasicTextField(
                         value = previewText,
                         onValueChange = { 
@@ -282,11 +339,12 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                             lineHeight = 25.sp
                         ),
                         visualTransformation = remember(previewText.selection, transientHighlight, highlightColor) {
+                            val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
                             SelectionHighlightTransformation(
                                 selection = previewText.selection,
                                 transientHighlight = transientHighlight,
-                                highlightColor = highlightColor.copy(alpha = 0.65f),
-                                highlightedTextColor = Color.White
+                                highlightColor = highlightColor.copy(alpha = 0.7f),
+                                highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White
                             )
                         },
                         cursorBrush = SolidColor(Color.Transparent),
@@ -296,14 +354,116 @@ fun ReplacePopup(viewModel: EditorViewModel) {
 
                 Canvas(modifier = Modifier.matchParentSize()) {
                     val layout = layoutResult
-                    if (layout != null) {
-                        val caret = previewText.selection.end.coerceIn(0, previewText.text.length)
-                        val rect = layout.getCursorRect(caret)
-                        drawRoundRect(
-                            color = highlightColor.copy(alpha = cursorAlpha.value),
-                            topLeft = Offset(rect.left, rect.top),
-                            size = Size(2.5.dp.toPx(), rect.height),
-                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                    if (layout != null && previewText.selection.collapsed) {
+                        try {
+                            val maxLayoutOffset = layout.layoutInput.text.length
+                            val caret = previewText.selection.end.coerceIn(0, maxLayoutOffset)
+                            val rect = layout.getCursorRect(caret)
+                            drawRoundRect(
+                                color = highlightColor.copy(alpha = cursorAlpha.value),
+                                topLeft = Offset(rect.left, rect.top),
+                                size = Size(2.5.dp.toPx(), rect.height),
+                                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                            )
+                        } catch (e: Exception) {
+                            // Ignore race condition between text edit and layout calculation
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Editing action row: Mode toggle (K), Delete, Enter
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // K (Char / Word) Toggle
+                Surface(
+                    onClick = {
+                        kActive = !kActive
+                        viewModel.ttsWrapper.speakFeedback(if (kActive) "Character mode" else "Word mode")
+                    },
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (kActive) Color(0xFF56D0DE) else Color(0xFF1E283C),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (kActive) Color(0xFF56D0DE) else Color(0xFF334155)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            "K",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (kActive) Color(0xFF0A1926) else Color.White
+                        )
+                        Text(
+                            if (kActive) "CHAR" else "WORD",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (kActive) Color(0xFF0A1926) else Color(0xFF8FA7D8)
+                        )
+                    }
+                }
+
+                // Delete Button
+                Surface(
+                    onClick = { handleDelete() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E283C),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            Icons.Default.Backspace,
+                            contentDescription = "Delete",
+                            tint = Color(0xFFFF6B8A),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "DEL",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFECEFF8)
+                        )
+                    }
+                }
+
+                // Enter Button
+                Surface(
+                    onClick = { handleEnter() },
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFF1E283C),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+                    modifier = Modifier.weight(1f).height(46.dp)
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardReturn,
+                            contentDescription = "Enter",
+                            tint = Color(0xFF56D0DE),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "ENTER",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFECEFF8)
                         )
                     }
                 }
@@ -311,54 +471,17 @@ fun ReplacePopup(viewModel: EditorViewModel) {
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Control keypad in popup sandbox
+            // Navigation & Voice Cluster: Mic Button on left + Arrow Cluster on right
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFF0E131F), RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ActionButtonGrid(
-                    onActionClick = { action ->
-                        when (action) {
-                            ActionButton.K -> {
-                                kActive = !kActive
-                                viewModel.ttsWrapper.speakFeedback(if (kActive) "Character mode" else "Word mode")
-                            }
-                            ActionButton.P -> {
-                                pActive = !pActive
-                                viewModel.ttsWrapper.speakFeedback(if (pActive) "Paragraph mode" else "Line mode")
-                            }
-                            else -> {
-                                val clipboardText = if (action == ActionButton.PASTE) viewModel.pasteFromClipboard() else null
-                                previewText = com.example.logic.TextActionLogic.handleAction(
-                                    action = action,
-                                    currentValue = previewText,
-                                    clipboardText = clipboardText,
-                                    onCopy = { viewModel.copyToClipboard(it) }
-                                )
-                                when (action) {
-                                    ActionButton.CUT -> viewModel.ttsWrapper.speakFeedback("Cut")
-                                    ActionButton.COPY -> viewModel.ttsWrapper.speakFeedback("Copied")
-                                    ActionButton.DELETE -> viewModel.ttsWrapper.speakFeedback("Deleted")
-                                    ActionButton.PASTE -> viewModel.ttsWrapper.speakFeedback("Pasted")
-                                    ActionButton.ENTER -> viewModel.ttsWrapper.speakFeedback("Enter")
-                                    else -> {}
-                                }
-                                selActive = false
-                                selAnchor = null
-                                idealX = null
-                                transientHighlight = null
-                            }
-                        }
-                    },
-                    onMoreClick = { showPopupMoreSheet = true },
-                    buttonOrder = buttonOrderList,
-                    sizeMultiplier = settings.buttonSizeMultiplier,
-                    modifier = Modifier.weight(1f)
-                )
-
-                FloatingMicButton(
-                    isListening = isListening,
+                // Mic Button inside popup (re-dictate / add speech)
+                Surface(
                     onClick = {
                         val hasPermission = ContextCompat.checkSelfPermission(
                             context, Manifest.permission.RECORD_AUDIO
@@ -369,12 +492,30 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                         } else {
                             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
+                    },
+                    shape = CircleShape,
+                    color = if (isListening) Color(0xFFFF4B6E) else Color(0xFF2563EB),
+                    border = androidx.compose.foundation.BorderStroke(
+                        2.dp,
+                        if (isListening) Color.White else Color(0xFF93C5FD)
+                    ),
+                    modifier = Modifier
+                        .size(62.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                            contentDescription = if (isListening) "Stop dictating" else "Dictate more",
+                            tint = Color.White,
+                            modifier = Modifier.size(30.dp)
+                        )
                     }
-                )
+                }
 
+                // Arrow Cluster for popup navigation
                 ArrowKeyCluster(
                     selActive = selActive,
-                    scale = settings.arrowSize * 0.85f,
+                    scale = (settings.arrowSize * 0.85f).coerceIn(0.7f, 1.2f),
                     onMoveUp = { handleArrow(ArrowDirection.UP) },
                     onMoveDown = { handleArrow(ArrowDirection.DOWN) },
                     onMoveLeft = { handleArrow(ArrowDirection.LEFT) },
@@ -399,20 +540,22 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Action buttons: Cancel and Apply
+            // Action buttons: Cancel and Done
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
                     onClick = { viewModel.closeReplacePopup() },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8FA7D8)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF26324A))
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Button(
@@ -421,11 +564,13 @@ fun ReplacePopup(viewModel: EditorViewModel) {
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF2563EB),
                         disabledContainerColor = Color(0xFF1E293B)
-                    )
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(48.dp)
                 ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Apply")
+                    Text("Done", fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

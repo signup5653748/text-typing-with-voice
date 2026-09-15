@@ -84,34 +84,48 @@ object CursorLogic {
                 } else if (layoutResult != null && layoutResult.lineCount > 0) {
                     val currentLine = layoutResult.getLineForOffset(currentCaret.coerceIn(0, text.length))
                     val prevLine = (currentLine - 1).coerceAtLeast(0)
-                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
-                    newIdealX = x
 
-                    val target = if (currentLine <= 0) {
-                        0
-                    } else {
-                        val lineTop = layoutResult.getLineTop(prevLine)
-                        val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
-                        if (calculatedTarget >= currentCaret) {
-                            val prevLineEnd = layoutResult.getLineEnd(prevLine)
-                            if (prevLineEnd < currentCaret) {
-                                prevLineEnd
-                            } else if (prevLine == 0) {
-                                0
-                            } else {
-                                (currentCaret - 1).coerceAtLeast(0)
-                            }
+                    if (isSelActive) {
+                        // When Up moves active edge to a new line in SEL mode:
+                        // land at the very start of that previous line so the whole line is included
+                        newIdealX = null
+                        if (currentLine <= 0) {
+                            0
                         } else {
-                            calculatedTarget
+                            layoutResult.getLineStart(prevLine)
                         }
-                    }
-                    if (!isSelActive) {
+                    } else {
+                        val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
+                        newIdealX = x
+
+                        val target = if (currentLine <= 0) {
+                            0
+                        } else {
+                            val lineTop = layoutResult.getLineTop(prevLine)
+                            val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+                            if (calculatedTarget >= currentCaret) {
+                                val prevLineEnd = layoutResult.getLineEnd(prevLine)
+                                if (prevLineEnd < currentCaret) {
+                                    prevLineEnd
+                                } else if (prevLine == 0) {
+                                    0
+                                } else {
+                                    (currentCaret - 1).coerceAtLeast(0)
+                                }
+                            } else {
+                                calculatedTarget
+                            }
+                        }
                         transientRange = getLineRange(text, layoutResult, prevLine)
+                        target
                     }
-                    target
                 } else {
                     newIdealX = null
-                    val target = findPreviousLineOffset(text, currentCaret)
+                    val target = if (isSelActive) {
+                        findLineStartBefore(text, currentCaret)
+                    } else {
+                        findPreviousLineOffset(text, currentCaret)
+                    }
                     val finalTarget = if (target >= currentCaret && currentCaret > 0) 0 else target
                     if (!isSelActive) {
                         transientRange = getFallbackLineRange(text, finalTarget)
@@ -131,34 +145,49 @@ object CursorLogic {
                 } else if (layoutResult != null && layoutResult.lineCount > 0) {
                     val currentLine = layoutResult.getLineForOffset(currentCaret.coerceIn(0, text.length))
                     val nextLine = (currentLine + 1).coerceAtMost(layoutResult.lineCount - 1)
-                    val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
-                    newIdealX = x
 
-                    val target = if (currentLine >= layoutResult.lineCount - 1) {
-                        text.length
-                    } else {
-                        val lineTop = layoutResult.getLineTop(nextLine)
-                        val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
-                        if (calculatedTarget <= currentCaret) {
-                            val nextLineStart = layoutResult.getLineStart(nextLine)
-                            if (nextLineStart > currentCaret) {
-                                nextLineStart
-                            } else if (nextLine == layoutResult.lineCount - 1) {
-                                text.length
-                            } else {
-                                (currentCaret + 1).coerceAtMost(text.length)
-                            }
+                    if (isSelActive) {
+                        // When Down moves active edge to a new line in SEL mode:
+                        // land at the end/full line of that next line or start of subsequent
+                        newIdealX = null
+                        if (currentLine >= layoutResult.lineCount - 1) {
+                            text.length
                         } else {
-                            calculatedTarget
+                            val nextLineEnd = layoutResult.getLineEnd(nextLine, visibleEnd = false)
+                            nextLineEnd.coerceIn(0, text.length)
                         }
-                    }
-                    if (!isSelActive) {
+                    } else {
+                        val x = currentIdealX ?: layoutResult.getHorizontalPosition(currentCaret.coerceIn(0, text.length), true)
+                        newIdealX = x
+
+                        val target = if (currentLine >= layoutResult.lineCount - 1) {
+                            text.length
+                        } else {
+                            val lineTop = layoutResult.getLineTop(nextLine)
+                            val calculatedTarget = layoutResult.getOffsetForPosition(Offset(x, lineTop + 1f)).coerceIn(0, text.length)
+                            if (calculatedTarget <= currentCaret) {
+                                val nextLineStart = layoutResult.getLineStart(nextLine)
+                                if (nextLineStart > currentCaret) {
+                                    nextLineStart
+                                } else if (nextLine == layoutResult.lineCount - 1) {
+                                    text.length
+                                } else {
+                                    (currentCaret + 1).coerceAtMost(text.length)
+                                }
+                            } else {
+                                calculatedTarget
+                            }
+                        }
                         transientRange = getLineRange(text, layoutResult, nextLine)
+                        target
                     }
-                    target
                 } else {
                     newIdealX = null
-                    val target = findNextLineOffset(text, currentCaret)
+                    val target = if (isSelActive) {
+                        findLineEndAfter(text, currentCaret)
+                    } else {
+                        findNextLineOffset(text, currentCaret)
+                    }
                     val finalTarget = if (target <= currentCaret && currentCaret < text.length) text.length else target
                     if (!isSelActive) {
                         transientRange = getFallbackLineRange(text, finalTarget)
@@ -251,14 +280,16 @@ object CursorLogic {
         }
     }
 
-    fun findPreviousParagraphStart(text: String, offset: Int): Int {
-        if (text.isEmpty() || offset <= 0) return 0
-        val currentStart = findParagraphStart(text, offset)
-        if (offset > currentStart) {
-            return currentStart
+    fun findPreviousParagraphStart(text: String, currentOffset: Int): Int {
+        if (text.isEmpty() || currentOffset <= 0) return 0
+        val pos = currentOffset.coerceIn(0, text.length)
+
+        var p = (pos - 1).coerceAtLeast(0)
+        while (p > 0 && text[p] == '\n') {
+            p--
         }
-        val searchPos = (currentStart - 3).coerceAtLeast(0)
-        val prevBreak = text.lastIndexOf("\n\n", searchPos)
+
+        val prevBreak = text.lastIndexOf("\n\n", p)
         return if (prevBreak == -1) {
             0
         } else {
@@ -270,71 +301,89 @@ object CursorLogic {
         }
     }
 
-    fun findNextParagraphStart(text: String, offset: Int): Int {
+    fun findNextParagraphStart(text: String, currentOffset: Int): Int {
         val len = text.length
-        if (offset >= len) return len
-        val pos = offset.coerceIn(0, len)
+        if (currentOffset >= len) return len
+        val pos = currentOffset.coerceIn(0, len)
+
         val nextBreak = text.indexOf("\n\n", pos)
-        if (nextBreak == -1) {
-            return len
+        return if (nextBreak == -1) {
+            len
+        } else {
+            var start = nextBreak + 2
+            while (start < len && text[start] == '\n') {
+                start++
+            }
+            start
         }
-        var start = nextBreak + 2
-        while (start < len && text[start] == '\n') {
-            start++
-        }
-        return start.coerceAtMost(len)
     }
 
     fun getParagraphRangeAt(text: String, offset: Int): TextRange {
         if (text.isEmpty()) return TextRange(0, 0)
-        val start = findParagraphStart(text, offset)
-        val nextBreak = text.indexOf("\n\n", start)
-        val end = if (nextBreak != -1) nextBreak else text.length
-        return TextRange(start, end)
+        val pos = offset.coerceIn(0, text.length)
+        val start = findParagraphStart(text, pos)
+        val nextBreak = text.indexOf("\n\n", pos)
+        val end = if (nextBreak == -1) text.length else nextBreak
+        return TextRange(start, max(start, end))
+    }
+
+    fun findPreviousLineOffset(text: String, currentOffset: Int): Int {
+        if (currentOffset <= 0) return 0
+        val pos = currentOffset.coerceIn(0, text.length)
+        val prevNl = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0))
+        if (prevNl == -1) return 0
+        val lineBeforeNl = text.lastIndexOf('\n', (prevNl - 1).coerceAtLeast(0))
+        val prevLineStart = if (lineBeforeNl == -1) 0 else lineBeforeNl + 1
+        val col = pos - (prevNl + 1)
+        val prevLineLen = prevNl - prevLineStart
+        return (prevLineStart + min(col, prevLineLen)).coerceIn(0, text.length)
+    }
+
+    fun findNextLineOffset(text: String, currentOffset: Int): Int {
+        val len = text.length
+        if (currentOffset >= len) return len
+        val pos = currentOffset.coerceIn(0, len)
+        val currentLineStart = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0)).let { if (it == -1) 0 else it + 1 }
+        val nextNl = text.indexOf('\n', pos)
+        if (nextNl == -1) return len
+        val nextLineStart = nextNl + 1
+        if (nextLineStart >= len) return len
+        val nextNextNl = text.indexOf('\n', nextLineStart)
+        val nextLineLen = if (nextNextNl == -1) (len - nextLineStart) else (nextNextNl - nextLineStart)
+        val col = pos - currentLineStart
+        return (nextLineStart + min(col, nextLineLen)).coerceIn(0, len)
+    }
+
+    private fun findLineStartBefore(text: String, currentOffset: Int): Int {
+        if (currentOffset <= 0) return 0
+        val prevNl = text.lastIndexOf('\n', (currentOffset - 1).coerceAtLeast(0))
+        if (prevNl == -1) return 0
+        val lineBeforeNl = text.lastIndexOf('\n', (prevNl - 1).coerceAtLeast(0))
+        return if (lineBeforeNl == -1) 0 else lineBeforeNl + 1
+    }
+
+    private fun findLineEndAfter(text: String, currentOffset: Int): Int {
+        val len = text.length
+        if (currentOffset >= len) return len
+        val nextNl = text.indexOf('\n', currentOffset)
+        if (nextNl == -1) return len
+        val afterNextNl = text.indexOf('\n', nextNl + 1)
+        return if (afterNextNl == -1) len else afterNextNl
     }
 
     fun getLineRange(text: String, layoutResult: TextLayoutResult, lineIndex: Int): TextRange {
-        val boundedLine = lineIndex.coerceIn(0, (layoutResult.lineCount - 1).coerceAtLeast(0))
-        val start = layoutResult.getLineStart(boundedLine)
-        var end = layoutResult.getLineEnd(boundedLine)
-        // Trim trailing newline if we want text span or keep full line
-        if (end > start && end <= text.length && text[end - 1] == '\n') {
-            end -= 1
-        }
-        return TextRange(start, end)
+        if (text.isEmpty() || layoutResult.lineCount == 0) return TextRange(0, 0)
+        val line = lineIndex.coerceIn(0, layoutResult.lineCount - 1)
+        val start = layoutResult.getLineStart(line)
+        val end = layoutResult.getLineEnd(line, visibleEnd = true)
+        return TextRange(start, max(start, end))
     }
 
     fun getFallbackLineRange(text: String, offset: Int): TextRange {
         if (text.isEmpty()) return TextRange(0, 0)
         val pos = offset.coerceIn(0, text.length)
-        val lastNewline = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0))
-        val start = if (lastNewline == -1) 0 else lastNewline + 1
-        val nextNewline = text.indexOf('\n', pos)
-        val end = if (nextNewline == -1) text.length else nextNewline
-        return TextRange(start, end)
-    }
-
-    private fun findPreviousLineOffset(text: String, currentOffset: Int): Int {
-        if (currentOffset <= 0) return 0
-        val lastNewline = text.lastIndexOf('\n', currentOffset - 1)
-        if (lastNewline == -1) return 0
-        val lineCol = currentOffset - (lastNewline + 1)
-        val prevLineNewline = text.lastIndexOf('\n', lastNewline - 1)
-        val prevLineStart = if (prevLineNewline == -1) 0 else prevLineNewline + 1
-        val prevLineLen = lastNewline - prevLineStart
-        return prevLineStart + min(lineCol, prevLineLen)
-    }
-
-    private fun findNextLineOffset(text: String, currentOffset: Int): Int {
-        val len = text.length
-        if (currentOffset >= len) return len
-        val currentLineStart = text.lastIndexOf('\n', currentOffset - 1).let { if (it == -1) 0 else it + 1 }
-        val lineCol = currentOffset - currentLineStart
-        val nextNewline = text.indexOf('\n', currentOffset)
-        if (nextNewline == -1) return len
-        val nextLineStart = nextNewline + 1
-        val lineAfterNext = text.indexOf('\n', nextLineStart).let { if (it == -1) len else it }
-        val nextLineLen = lineAfterNext - nextLineStart
-        return min(nextLineStart + lineCol, lineAfterNext)
+        val start = text.lastIndexOf('\n', (pos - 1).coerceAtLeast(0)).let { if (it == -1) 0 else it + 1 }
+        val end = text.indexOf('\n', pos).let { if (it == -1) text.length else it }
+        return TextRange(start, max(start, end))
     }
 }

@@ -31,7 +31,7 @@ fun LayoutSettingsScreen(
     var buttonOrder by remember(settings.buttonOrder) {
         val list = settings.buttonOrder.split(",").filter { it.isNotBlank() }
         if (list.size < 6) {
-            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "MORE", "ENTER"))
+            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "MORE", "REPLACE", "K", "P", "KB_LOCK"))
         } else {
             mutableStateOf(list)
         }
@@ -42,8 +42,15 @@ fun LayoutSettingsScreen(
         "COPY" to "Copy (COPY)",
         "DELETE" to "Delete (DEL)",
         "PASTE" to "Paste (PASTE)",
+        "SELECT_ALL" to "Select All (ALL)",
+        "ENTER" to "Enter Line (ENTER)",
+        "TOP" to "Top of Document (TOP)",
+        "END" to "End of Document (END)",
         "MORE" to "More Menu (MORE)",
-        "ENTER" to "Enter Line (ENTER)"
+        "REPLACE" to "Voice Replace (REP)",
+        "K" to "K Char/Word (K)",
+        "P" to "P Para/Line (P)",
+        "KB_LOCK" to "Keyboard Lock (KB)"
     )
 
     Scaffold(

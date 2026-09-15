@@ -2,7 +2,6 @@ package com.example.data
 
 import android.content.Context
 import android.os.Environment
-import androidx.compose.ui.graphics.Color
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
@@ -13,26 +12,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
-
-enum class ActionButton {
-    CUT, COPY, K, P, DELETE, PASTE, ENTER
-}
-
-enum class ControlElement(val label: String, val category: String) {
-    CUT("Cut (CUT)", "Actions"),
-    COPY("Copy (COPY)", "Actions"),
-    DELETE("Delete (DEL)", "Actions"),
-    PASTE("Paste (PASTE)", "Actions"),
-    MORE("More Menu (...)", "Actions"),
-    ENTER("Enter (↵)", "Actions"),
-    K_TOGGLE("Letter K Toggle", "Modes"),
-    P_TOGGLE("Letter P Toggle", "Modes"),
-    KB_LOCK("Keyboard Lock (KB)", "Modes"),
-    DPAD("Directional D-Pad (Arrows + SEL)", "Navigation"),
-    READ_BTN("Floating Read TTS Button", "Floating"),
-    MIC_BTN("Floating Voice Mic Button", "Floating")
-}
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "voicetype_settings")
 
 data class StarredFolder(
     val id: String,
@@ -53,21 +33,25 @@ data class SessionDraft(
 data class SettingsEntity(
     val id: Int = 1,
     // Theme & General
-    val themeName: String = "Dark", // "Dark", "Light", "OLED Black", "Midnight Blue", "Forest Green", "Sepia"
-    val highlightColorHex: Long = 0xFFFFD600, // Bright Yellow default
-    val backgroundColorHex: Long = 0xFF000000, // Black default
-    val textColorHex: Long = 0xFFECEEF2, // Off-white default
+    val themeName: String = "Dark",
+    val highlightColorHex: Long = 0xFFFFD600,
+    val backgroundColorHex: Long = 0xFF000000,
+    val textColorHex: Long = 0xFFECEEF2,
     val textSizeSp: Float = 18.0f,
+    val hideHeadingSymbols: Boolean = true,
+    val alwaysInsertMicDirectly: Boolean = true,
     // Speech & TTS
     val voiceLanguage: String = "en-US",
     val ttsLanguage: String = "en-US",
     val ttsEnginePackage: String = "",
+    val ttsSpeed: Float = 1.0f,
+    val ttsPitch: Float = 1.0f,
     // Layout
     val arrowSize: Float = 1.0f,
-    val buttonSizeMultiplier: Float = 1.0f, // 0.8f to 1.5f
-    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,MORE,ENTER",
-    val hiddenElements: String = "", // comma-separated ControlElement names that user hid
-    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,MORE,ENTER,DPAD,READ_BTN,MIC_BTN,K_TOGGLE,P_TOGGLE,KB_LOCK",
+    val buttonSizeMultiplier: Float = 1.0f,
+    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
+    val hiddenElements: String = "",
+    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
     // Starred Folders
     val starredFoldersJson: String = ""
 )
@@ -78,9 +62,13 @@ class SettingsRepository(private val context: Context) {
     private val BACKGROUND_COLOR = longPreferencesKey("backgroundColorHex")
     private val TEXT_COLOR = longPreferencesKey("textColorHex")
     private val TEXT_SIZE = floatPreferencesKey("textSizeSp")
+    private val HIDE_HEADING_SYMBOLS = booleanPreferencesKey("hideHeadingSymbols")
+    private val ALWAYS_INSERT_MIC_DIRECTLY = booleanPreferencesKey("alwaysInsertMicDirectly")
     private val VOICE_LANGUAGE = stringPreferencesKey("voiceLanguage")
     private val TTS_LANGUAGE = stringPreferencesKey("ttsLanguage")
     private val TTS_ENGINE_PKG = stringPreferencesKey("ttsEnginePackage")
+    private val TTS_SPEED = floatPreferencesKey("ttsSpeed")
+    private val TTS_PITCH = floatPreferencesKey("ttsPitch")
     private val ARROW_SIZE = floatPreferencesKey("arrowSize")
     private val BUTTON_SIZE_MULTIPLIER = floatPreferencesKey("buttonSizeMultiplier")
     private val BUTTON_ORDER = stringPreferencesKey("buttonOrder")
@@ -92,6 +80,21 @@ class SettingsRepository(private val context: Context) {
     private val LAST_SESSION_URI = stringPreferencesKey("lastSessionUri")
     private val LAST_SESSION_SEL_START = intPreferencesKey("lastSessionSelStart")
     private val LAST_SESSION_SEL_END = intPreferencesKey("lastSessionSelEnd")
+
+    val sessionDraftFlow: Flow<SessionDraft?> = context.dataStore.data.map { prefs ->
+        val text = prefs[LAST_SESSION_TEXT]
+        if (text.isNullOrBlank()) {
+            null
+        } else {
+            SessionDraft(
+                text = text,
+                fileName = prefs[LAST_SESSION_FILE_NAME] ?: "newfile.txt",
+                uriString = prefs[LAST_SESSION_URI] ?: "",
+                selectionStart = prefs[LAST_SESSION_SEL_START] ?: 0,
+                selectionEnd = prefs[LAST_SESSION_SEL_END] ?: 0
+            )
+        }
+    }
 
     val lastSessionDraft: Flow<SessionDraft> = context.dataStore.data.map { prefs ->
         SessionDraft(
@@ -123,26 +126,32 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
-    val settings: Flow<SettingsEntity> = context.dataStore.data.map { prefs ->
+    val settingsFlow: Flow<SettingsEntity> = context.dataStore.data.map { prefs ->
         SettingsEntity(
             themeName = prefs[THEME_NAME] ?: "Dark",
             highlightColorHex = prefs[HIGHLIGHT_COLOR] ?: 0xFFFFD600,
             backgroundColorHex = prefs[BACKGROUND_COLOR] ?: 0xFF000000,
             textColorHex = prefs[TEXT_COLOR] ?: 0xFFECEEF2,
             textSizeSp = prefs[TEXT_SIZE] ?: 18.0f,
+            hideHeadingSymbols = prefs[HIDE_HEADING_SYMBOLS] ?: true,
+            alwaysInsertMicDirectly = prefs[ALWAYS_INSERT_MIC_DIRECTLY] ?: true,
             voiceLanguage = prefs[VOICE_LANGUAGE] ?: "en-US",
             ttsLanguage = prefs[TTS_LANGUAGE] ?: "en-US",
             ttsEnginePackage = prefs[TTS_ENGINE_PKG] ?: "",
+            ttsSpeed = prefs[TTS_SPEED] ?: 1.0f,
+            ttsPitch = prefs[TTS_PITCH] ?: 1.0f,
             arrowSize = prefs[ARROW_SIZE] ?: 1.0f,
             buttonSizeMultiplier = prefs[BUTTON_SIZE_MULTIPLIER] ?: 1.0f,
-            buttonOrder = prefs[BUTTON_ORDER] ?: "CUT,COPY,DELETE,PASTE,MORE,ENTER",
+            buttonOrder = prefs[BUTTON_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
             hiddenElements = prefs[HIDDEN_ELEMENTS] ?: "",
-            elementLayoutOrder = prefs[ELEMENT_LAYOUT_ORDER] ?: "CUT,COPY,DELETE,PASTE,MORE,ENTER,DPAD,READ_BTN,MIC_BTN,K_TOGGLE,P_TOGGLE,KB_LOCK",
+            elementLayoutOrder = prefs[ELEMENT_LAYOUT_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
             starredFoldersJson = prefs[STARRED_FOLDERS] ?: ""
         )
     }
 
-    val starredFolders: Flow<List<StarredFolder>> = context.dataStore.data.map { prefs ->
+    val settings: Flow<SettingsEntity> = settingsFlow
+
+    val starredFoldersFlow: Flow<List<StarredFolder>> = context.dataStore.data.map { prefs ->
         val raw = prefs[STARRED_FOLDERS]
         if (raw.isNullOrBlank()) {
             getDefaultStarredFolders()
@@ -152,12 +161,107 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    val starredFolders: Flow<List<StarredFolder>> = starredFoldersFlow
+
     private fun getDefaultStarredFolders(): List<StarredFolder> {
         val docsDir = File(context.filesDir, "Documents").apply { mkdirs() }
         val notesDir = File(context.filesDir, "Notes").apply { mkdirs() }
         val voiceNotesDir = File(context.filesDir, "VoiceNotes").apply { mkdirs() }
+        val internalDownloadsDir = File(context.filesDir, "Downloads").apply { mkdirs() }
+
+        val dummyContent = """
+            ▫ VoiceType Master Feature Test Document
+            Welcome to the VoiceType testing document! This file is designed to test all heading levels, speech recognition, text-to-speech, and keypad navigation features.
+
+            ▫▫ Quick Start Guide
+            Use the 3x3 arrow cluster to move character-by-character, line-by-line (K mode), or paragraph-by-paragraph (P mode).
+
+            ▫▫▫ Keypad and Navigation Controls
+            - JUMP: Opens the Jump to headings bottom sheet.
+            - TOP / END: Jumps immediately to the start or end of the document.
+            - READ: Reads aloud starting from the active cursor position without pronouncing ▫️ symbols.
+            - MIC: Initiates voice dictation, or voice replacement if text is currently highlighted.
+            - KB_LOCK: Locks out software keyboard typing and suppresses cursor blinking while navigating.
+
+            ▫▫ Chapter 1: Multi-Level Heading Hierarchy
+            Headings are created seamlessly by prefixing lines with Unicode small square symbols (▫).
+
+            ▫▫▫ Section 1.1: Standard Headings
+            Level 1 headings use one square (▫). Level 2 headings use two squares (▫▫). Level 3 headings use three squares (▫▫▫).
+
+            ▫▫▫ Section 1.2: Deep Nested Subsections
+            ▫▫▫▫ Subsection 1.2.1: Level 4 Deep Heading
+            ▫▫▫▫▫ Sub-subsection 1.2.1.1: Level 5 Deepest Heading
+            The Jump to dialog dynamically indents each level and color-codes depth markers.
+
+            ▫▫ Chapter 2: Speech & Text-to-Speech
+            ▫▫▫ Section 2.1: Voice Typing
+            Tap the MIC button at the bottom right to dictate text directly into the cursor position.
+
+            ▫▫▫ Section 2.2: Voice Replacement
+            Select a word or phrase, then tap MIC to speak a replacement.
+
+            ▫▫ Chapter 3: Plain-Text Storage & Portability
+            Because all headings and content are standard UTF-8 text, this file opens seamlessly in any editor.
+
+            ▫ Summary and Verification
+            All features—including keyboard lock cursor suppression, Jump to dialog, and heading symbol hiding—are ready for complete verification.
+        """.trimIndent()
+
+        // 1. Write to App Documents directory
+        try {
+            val sampleDoc = File(docsDir, "Headings_Demo.txt")
+            if (!sampleDoc.exists()) {
+                sampleDoc.writeText(dummyContent)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 2. Write to App Internal Downloads directory
+        try {
+            val internalDownloadDoc = File(internalDownloadsDir, "VoiceType_Test_Document.txt")
+            internalDownloadDoc.writeText(dummyContent)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // 3. Write to App External Files Downloads directory
+        val extDownloadsDir = try {
+            context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.apply {
+                mkdirs()
+                val extDoc = File(this, "VoiceType_Test_Document.txt")
+                extDoc.writeText(dummyContent)
+            }
+        } catch (e: Exception) {
+            null
+        }
+
+        // 4. Write to Device Public Downloads directory (/sdcard/Download)
+        val publicDownloadsDir = try {
+            val pubDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (pubDir != null) {
+                pubDir.mkdirs()
+                val pubDoc = File(pubDir, "VoiceType_Test_Document.txt")
+                pubDoc.writeText(dummyContent)
+                pubDir
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+
+        val downloadsPath = publicDownloadsDir?.absolutePath 
+            ?: extDownloadsDir?.absolutePath 
+            ?: internalDownloadsDir.absolutePath
 
         return listOf(
+            StarredFolder(
+                id = "def_downloads",
+                name = "Downloads",
+                pathDisplay = if (publicDownloadsDir != null) "Device / Download" else "App Storage / Downloads",
+                uriString = downloadsPath,
+                isDefault = true
+            ),
             StarredFolder(
                 id = "def_docs",
                 name = "My Documents",
@@ -272,6 +376,14 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs -> prefs[TTS_ENGINE_PKG] = pkg }
     }
 
+    suspend fun updateTtsSpeed(speed: Float) {
+        context.dataStore.edit { prefs -> prefs[TTS_SPEED] = speed }
+    }
+
+    suspend fun updateTtsPitch(pitch: Float) {
+        context.dataStore.edit { prefs -> prefs[TTS_PITCH] = pitch }
+    }
+
     suspend fun updateArrowSize(size: Float) {
         context.dataStore.edit { prefs -> prefs[ARROW_SIZE] = size }
     }
@@ -283,6 +395,18 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateButtonOrder(order: List<ActionButton>) {
         context.dataStore.edit { prefs ->
             prefs[BUTTON_ORDER] = order.joinToString(",") { it.name }
+        }
+    }
+
+    suspend fun updateHideHeadingSymbols(hide: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[HIDE_HEADING_SYMBOLS] = hide
+        }
+    }
+
+    suspend fun updateAlwaysInsertMicDirectly(always: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[ALWAYS_INSERT_MIC_DIRECTLY] = always
         }
     }
 
