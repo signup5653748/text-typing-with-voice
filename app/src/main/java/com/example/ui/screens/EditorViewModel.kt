@@ -290,14 +290,14 @@ class EditorViewModel(
     fun toggleK() { 
         val newVal = !_kActive.value
         _kActive.value = newVal
-        ttsWrapper.speakFeedback(if (newVal) "Character mode" else "Word mode")
+        speakButtonFeedback("K", if (newVal) "Character mode" else "Word mode")
     }
 
     // Toggle P without resetting active selection
     fun toggleP() { 
         val newVal = !_pActive.value
         _pActive.value = newVal
-        ttsWrapper.speakFeedback(if (newVal) "Paragraph mode" else "Line mode")
+        speakButtonFeedback("P", if (newVal) "Paragraph mode" else "Line mode")
     }
     
     fun toggleSel() { 
@@ -315,7 +315,7 @@ class EditorViewModel(
                 composition = null
             )
             _transientHighlightRange.value = null
-            ttsWrapper.speakFeedback("Selection mode off")
+            speakButtonFeedback("SEL", "Selection mode off")
         } else {
             // Turn on selection mode
             _selActive.value = true
@@ -323,7 +323,7 @@ class EditorViewModel(
             if (hasSelection) {
                 // Keep current selection and set anchor to the starting point
                 selAnchor = current.selection.start
-                ttsWrapper.speakFeedback("Selection mode on")
+                speakButtonFeedback("SEL", "Selection mode on")
             } else {
                 // Lock anchor at current caret position
                 val caret = current.selection.end.coerceIn(0, current.text.length)
@@ -332,7 +332,7 @@ class EditorViewModel(
                     selection = TextRange(caret, caret),
                     composition = null
                 )
-                ttsWrapper.speakFeedback("Selection mode on")
+                speakButtonFeedback("SEL", "Selection mode on")
             }
         }
     }
@@ -340,7 +340,7 @@ class EditorViewModel(
     fun toggleKbLock() { 
         val newVal = !_kbLockActive.value
         _kbLockActive.value = newVal
-        ttsWrapper.speakFeedback(if (newVal) "Keyboard locked" else "Keyboard unlocked")
+        speakButtonFeedback("KB_LOCK", if (newVal) "Keyboard locked" else "Keyboard unlocked")
     }
 
     fun openLanguagePicker() {
@@ -461,6 +461,43 @@ class EditorViewModel(
         }
     }
 
+    fun updateAdvancedSettingsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepo.updateAdvancedSettingsEnabled(enabled)
+        }
+    }
+
+    fun toggleSpeechFeedbackForButton(buttonName: String) {
+        viewModelScope.launch {
+            settingsRepo.toggleSpeechFeedbackForButton(buttonName)
+        }
+    }
+
+    fun updateDisabledSpeechFeedbackButtons(disabledList: List<String>) {
+        viewModelScope.launch {
+            settingsRepo.updateDisabledSpeechFeedbackButtons(disabledList)
+        }
+    }
+
+    fun updateHapticFeedbackEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepo.updateHapticFeedbackEnabled(enabled)
+        }
+    }
+
+    fun isSpeechFeedbackEnabledFor(buttonName: String): Boolean {
+        val s = settings.value
+        if (!s.advancedSettingsEnabled) return true
+        val disabled = s.disabledSpeechFeedbackButtons.split(",").map { it.trim().uppercase() }.filter { it.isNotEmpty() }
+        return !disabled.contains(buttonName.uppercase())
+    }
+
+    fun speakButtonFeedback(buttonName: String, phrase: String) {
+        if (isSpeechFeedbackEnabledFor(buttonName)) {
+            ttsWrapper.speakFeedback(phrase)
+        }
+    }
+
     fun updateButtonSizeMultiplier(multiplier: Float) {
         viewModelScope.launch {
             settingsRepo.updateButtonSizeMultiplier(multiplier)
@@ -524,9 +561,9 @@ class EditorViewModel(
             )
             _transientHighlightRange.value = null
             idealX = null
-            ttsWrapper.speakFeedback("Selected all")
+            speakButtonFeedback("SELECT_ALL", "Selected all")
         } else {
-            ttsWrapper.speakFeedback("Document is empty")
+            speakButtonFeedback("SELECT_ALL", "Document is empty")
         }
     }
 
@@ -1033,7 +1070,7 @@ class EditorViewModel(
             _transientHighlightRange.value = CursorLogic.getWordRangeAt(_textValue.value.text, 0)
         }
         idealX = null
-        ttsWrapper.speakFeedback("Top of document")
+        speakButtonFeedback("TOP", "Top of document")
     }
 
     fun jumpEnd() {
@@ -1048,7 +1085,7 @@ class EditorViewModel(
             _transientHighlightRange.value = CursorLogic.getWordRangeAt(_textValue.value.text, if (end > 0) end - 1 else 0)
         }
         idealX = null
-        ttsWrapper.speakFeedback("End of document")
+        speakButtonFeedback("END", "End of document")
     }
 
     fun onAction(action: ActionButton) {
@@ -1084,29 +1121,29 @@ class EditorViewModel(
                 when (action) {
                     ActionButton.CUT -> {
                         if (hasSelection) {
-                            ttsWrapper.speakFeedback("Cut")
+                            speakButtonFeedback("CUT", "Cut")
                         } else {
-                            ttsWrapper.speakFeedback("Nothing selected to cut")
+                            speakButtonFeedback("CUT", "Nothing selected to cut")
                         }
                     }
                     ActionButton.COPY -> {
                         if (hasSelection) {
-                            ttsWrapper.speakFeedback("Copied")
+                            speakButtonFeedback("COPY", "Copied")
                         } else {
-                            ttsWrapper.speakFeedback("Nothing selected to copy")
+                            speakButtonFeedback("COPY", "Nothing selected to copy")
                         }
                     }
                     ActionButton.DELETE -> {
-                        ttsWrapper.speakFeedback("Deleted")
+                        speakButtonFeedback("DELETE", "Deleted")
                     }
                     ActionButton.PASTE -> {
                         if (!clipboardText.isNullOrEmpty()) {
-                            ttsWrapper.speakFeedback("Pasted")
+                            speakButtonFeedback("PASTE", "Pasted")
                         } else {
-                            ttsWrapper.speakFeedback("Clipboard is empty")
+                            speakButtonFeedback("PASTE", "Clipboard is empty")
                         }
                     }
-                    ActionButton.ENTER -> ttsWrapper.speakFeedback("Enter")
+                    ActionButton.ENTER -> speakButtonFeedback("ENTER", "Enter")
                     else -> {}
                 }
                 

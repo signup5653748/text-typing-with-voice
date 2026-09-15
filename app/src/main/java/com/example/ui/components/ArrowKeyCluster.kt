@@ -175,10 +175,16 @@ private fun SelCenterButton(
 }
 
 @Composable
-fun Modifier.instantClickable(onClick: () -> Unit): Modifier {
+fun Modifier.instantClickable(
+    debounceMs: Long = 120L,
+    minPressDurationMs: Long = 40L,
+    onClick: () -> Unit
+): Modifier {
     val currentOnClick by androidx.compose.runtime.rememberUpdatedState(onClick)
     val interactionSource = remember { MutableInteractionSource() }
     val coroutineScope = rememberCoroutineScope()
+    val lastClickTime = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
+
     return this
         .indication(interactionSource, androidx.compose.foundation.LocalIndication.current)
         .pointerInput(Unit) {
@@ -186,7 +192,18 @@ fun Modifier.instantClickable(onClick: () -> Unit): Modifier {
                 onPress = { offset ->
                     val press = PressInteraction.Press(offset)
                     coroutineScope.launch { interactionSource.emit(press) }
-                    currentOnClick()
+                    
+                    val pressStartTime = System.currentTimeMillis()
+                    if (minPressDurationMs > 0L) {
+                        kotlinx.coroutines.delay(minPressDurationMs)
+                    }
+                    
+                    val now = System.currentTimeMillis()
+                    if (now - lastClickTime.longValue >= debounceMs) {
+                        lastClickTime.longValue = now
+                        currentOnClick()
+                    }
+                    
                     tryAwaitRelease()
                     coroutineScope.launch { interactionSource.emit(PressInteraction.Release(press)) }
                 }

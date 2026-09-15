@@ -52,6 +52,10 @@ data class SettingsEntity(
     val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
     val hiddenElements: String = "",
     val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
+    // Advanced & Granular Feedback Settings
+    val advancedSettingsEnabled: Boolean = false,
+    val disabledSpeechFeedbackButtons: String = "", // comma-separated button action names
+    val hapticFeedbackEnabled: Boolean = true,
     // Starred Folders
     val starredFoldersJson: String = ""
 )
@@ -74,6 +78,9 @@ class SettingsRepository(private val context: Context) {
     private val BUTTON_ORDER = stringPreferencesKey("buttonOrder")
     private val HIDDEN_ELEMENTS = stringPreferencesKey("hiddenElements")
     private val ELEMENT_LAYOUT_ORDER = stringPreferencesKey("elementLayoutOrder")
+    private val ADVANCED_SETTINGS_ENABLED = booleanPreferencesKey("advancedSettingsEnabled")
+    private val DISABLED_SPEECH_FEEDBACK_BUTTONS = stringPreferencesKey("disabledSpeechFeedbackButtons")
+    private val HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("hapticFeedbackEnabled")
     private val STARRED_FOLDERS = stringPreferencesKey("starredFolders")
     private val LAST_SESSION_TEXT = stringPreferencesKey("lastSessionText")
     private val LAST_SESSION_FILE_NAME = stringPreferencesKey("lastSessionFileName")
@@ -145,6 +152,9 @@ class SettingsRepository(private val context: Context) {
             buttonOrder = prefs[BUTTON_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
             hiddenElements = prefs[HIDDEN_ELEMENTS] ?: "",
             elementLayoutOrder = prefs[ELEMENT_LAYOUT_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
+            advancedSettingsEnabled = prefs[ADVANCED_SETTINGS_ENABLED] ?: false,
+            disabledSpeechFeedbackButtons = prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "",
+            hapticFeedbackEnabled = prefs[HAPTIC_FEEDBACK_ENABLED] ?: true,
             starredFoldersJson = prefs[STARRED_FOLDERS] ?: ""
         )
     }
@@ -425,6 +435,36 @@ class SettingsRepository(private val context: Context) {
                 current.add(elementName)
             }
             prefs[HIDDEN_ELEMENTS] = current.joinToString(",")
+        }
+    }
+
+    suspend fun updateAdvancedSettingsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[ADVANCED_SETTINGS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateDisabledSpeechFeedbackButtons(disabledList: List<String>) {
+        context.dataStore.edit { prefs ->
+            prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] = disabledList.joinToString(",")
+        }
+    }
+
+    suspend fun toggleSpeechFeedbackForButton(buttonName: String) {
+        context.dataStore.edit { prefs ->
+            val current = (prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+            if (current.contains(buttonName)) {
+                current.remove(buttonName)
+            } else {
+                current.add(buttonName)
+            }
+            prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] = current.joinToString(",")
+        }
+    }
+
+    suspend fun updateHapticFeedbackEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[HAPTIC_FEEDBACK_ENABLED] = enabled
         }
     }
 }

@@ -536,12 +536,6 @@ fun EditorScreen(
                         onClick = viewModel::jumpEnd,
                         modifier = Modifier.weight(0.9f)
                     )
-                    QuickToolButton(
-                        icon = Icons.Default.SelectAll,
-                        label = "ALL",
-                        onClick = viewModel::selectAll,
-                        modifier = Modifier.weight(1f)
-                    )
                 }
 
                 // 2 Equal-Width Panels: Action Grid (Left 1f) and Arrow Cluster (Right 1f)

@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DashboardCustomize
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,7 +29,8 @@ fun SettingsCategoriesScreen(
     onNavigateBack: () -> Unit,
     onNavigateToGeneral: () -> Unit,
     onNavigateToSpeech: () -> Unit,
-    onNavigateToLayout: () -> Unit
+    onNavigateToLayout: () -> Unit,
+    onNavigateToAdvanced: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -93,6 +95,17 @@ fun SettingsCategoriesScreen(
                     title = "Layout",
                     description = "Button scale, D-pad size & custom button arrangement",
                     onClick = onNavigateToLayout
+                )
+            }
+
+            item {
+                SettingsCategoryRow(
+                    icon = Icons.Default.Tune,
+                    iconBg = Color(0xFF8B5CF6).copy(alpha = 0.2f),
+                    iconTint = Color(0xFFC084FC),
+                    title = "Advanced",
+                    description = "Fine-grained speech feedback rules & custom layout editor",
+                    onClick = onNavigateToAdvanced
                 )
             }
         }
