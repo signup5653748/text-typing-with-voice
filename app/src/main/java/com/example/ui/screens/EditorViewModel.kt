@@ -545,8 +545,11 @@ class EditorViewModel(
                     )
                 } catch (e: Exception) {}
 
+                val resolvedName = getFileName(context.contentResolver, uri) ?: "document.txt"
+                val fileType = com.example.logic.SupportedFileType.fromFileName(resolvedName)
+
                 val text = context.contentResolver.openInputStream(uri)?.use { stream ->
-                    stream.bufferedReader().readText()
+                    com.example.logic.DocumentFileHandler.readDocument(stream, fileType)
                 } ?: ""
                 
                 cachedHeadings = null
@@ -556,9 +559,9 @@ class EditorViewModel(
                 _canRedo.value = false
                 _textValue.value = TextFieldValue(text = text, selection = TextRange(0, 0))
                 _currentFileUri.value = uri
-                _fileName.value = getFileName(context.contentResolver, uri) ?: "document.txt"
+                _fileName.value = resolvedName
                 resetCursorState()
-                ttsWrapper.speakFeedback("Opened ${_fileName.value}")
+                ttsWrapper.speakFeedback("Opened $resolvedName")
             } catch (e: Exception) {
                 e.printStackTrace()
                 ttsWrapper.speakFeedback("Error opening file")
@@ -576,15 +579,47 @@ class EditorViewModel(
                         Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     )
                 } catch (e: Exception) {}
-                
-                context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                    outputStream.write(_textValue.value.text.toByteArray())
+
+                val resolvedName = getFileName(context.contentResolver, uri) ?: _fileName.value
+                val fileType = com.example.logic.SupportedFileType.fromFileName(resolvedName)
+
+                // For docx overwrite, attempt to read existing bytes to preserve assets and styles
+                val existingBytes = if (fileType == com.example.logic.SupportedFileType.DOCX) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    } catch (e: Exception) {
+                        null
+                    }
+                } else null
+
+                context.contentResolver.openOutputStream(uri, "rwt")?.use { outputStream ->
+                    val existingStream = existingBytes?.let { java.io.ByteArrayInputStream(it) }
+                    com.example.logic.DocumentFileHandler.writeDocument(
+                        text = _textValue.value.text,
+                        outputStream = outputStream,
+                        fileType = fileType,
+                        existingInputStream = existingStream
+                    )
                     _currentFileUri.value = uri
-                    _fileName.value = getFileName(context.contentResolver, uri) ?: "unknown.txt"
+                    _fileName.value = resolvedName
                     ttsWrapper.speakFeedback("File saved")
+                } ?: run {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        val existingStream = existingBytes?.let { java.io.ByteArrayInputStream(it) }
+                        com.example.logic.DocumentFileHandler.writeDocument(
+                            text = _textValue.value.text,
+                            outputStream = outputStream,
+                            fileType = fileType,
+                            existingInputStream = existingStream
+                        )
+                        _currentFileUri.value = uri
+                        _fileName.value = resolvedName
+                        ttsWrapper.speakFeedback("File saved")
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+                ttsWrapper.speakFeedback("Error saving file")
             }
         }
     }
@@ -613,7 +648,21 @@ class EditorViewModel(
                 if (file.parentFile != null && !file.parentFile!!.exists()) {
                     file.parentFile!!.mkdirs()
                 }
-                file.writeText(_textValue.value.text)
+                val fileType = com.example.logic.SupportedFileType.fromFileName(file.name)
+                val existingBytes = if (file.exists() && fileType == com.example.logic.SupportedFileType.DOCX) {
+                    try { file.readBytes() } catch (e: Exception) { null }
+                } else null
+
+                java.io.FileOutputStream(file).use { out ->
+                    val existingStream = existingBytes?.let { java.io.ByteArrayInputStream(it) }
+                    com.example.logic.DocumentFileHandler.writeDocument(
+                        text = _textValue.value.text,
+                        outputStream = out,
+                        fileType = fileType,
+                        existingInputStream = existingStream
+                    )
+                }
+
                 _currentFileUri.value = Uri.fromFile(file)
                 _fileName.value = file.name
                 closeSaveDialog()
@@ -627,7 +676,9 @@ class EditorViewModel(
 
     fun saveToStarredFolder(folder: StarredFolder, customFileName: String) {
         val rawName = if (customFileName.isNotBlank()) customFileName.trim() else _fileName.value
-        val finalFileName = if (rawName.endsWith(".txt", ignoreCase = true)) rawName else "$rawName.txt"
+        // Ensure proper extension exists
+        val finalFileName = if (rawName.contains('.')) rawName else "$rawName.txt"
+        val fileType = com.example.logic.SupportedFileType.fromFileName(finalFileName)
 
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -648,12 +699,16 @@ class EditorViewModel(
                     val newFileUri = DocumentsContract.createDocument(
                         context.contentResolver,
                         docUri,
-                        "text/plain",
+                        fileType.mimeType,
                         finalFileName
                     )
                     if (newFileUri != null) {
                         context.contentResolver.openOutputStream(newFileUri)?.use { out ->
-                            out.write(_textValue.value.text.toByteArray())
+                            com.example.logic.DocumentFileHandler.writeDocument(
+                                text = _textValue.value.text,
+                                outputStream = out,
+                                fileType = fileType
+                            )
                         }
                         _currentFileUri.value = newFileUri
                         _fileName.value = finalFileName
@@ -667,7 +722,19 @@ class EditorViewModel(
                     val dir = File(folder.uriString)
                     if (!dir.exists()) dir.mkdirs()
                     val file = File(dir, finalFileName)
-                    file.writeText(_textValue.value.text)
+                    val existingBytes = if (file.exists() && fileType == com.example.logic.SupportedFileType.DOCX) {
+                        try { file.readBytes() } catch (e: Exception) { null }
+                    } else null
+
+                    java.io.FileOutputStream(file).use { out ->
+                        val existingStream = existingBytes?.let { java.io.ByteArrayInputStream(it) }
+                        com.example.logic.DocumentFileHandler.writeDocument(
+                            text = _textValue.value.text,
+                            outputStream = out,
+                            fileType = fileType,
+                            existingInputStream = existingStream
+                        )
+                    }
                     _currentFileUri.value = Uri.fromFile(file)
                     _fileName.value = finalFileName
                     closeSaveDialog()
@@ -1055,10 +1122,18 @@ class EditorViewModel(
     }
 
     fun pasteFromClipboard(): String {
-        val clipboard = getApplication<Application>().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val context = getApplication<Application>()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         if (clipboard.hasPrimaryClip()) {
-            val item = clipboard.primaryClip?.getItemAt(0)
-            return item?.text?.toString() ?: ""
+            val clipData = clipboard.primaryClip ?: return ""
+            if (clipData.itemCount > 0) {
+                val item = clipData.getItemAt(0)
+                // coerceToText preserves text and newline formatting across plain text, styled text, and HTML/URIs
+                val rawCharSequence = item.coerceToText(context)
+                val rawText = rawCharSequence?.toString() ?: ""
+                // Normalize Windows CRLF (\r\n) or legacy Mac CR (\r) into standard \n so all paragraph breaks survive
+                return rawText.replace("\r\n", "\n").replace("\r", "\n")
+            }
         }
         return ""
     }

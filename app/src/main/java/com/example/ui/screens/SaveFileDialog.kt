@@ -57,12 +57,15 @@ fun SaveFileDialog(
     val isSaveAsMode by viewModel.isSaveAsMode.collectAsState()
     val currentFileName by viewModel.fileName.collectAsState()
 
+    var selectedFormat by remember(currentFileName) {
+        mutableStateOf(com.example.logic.SupportedFileType.fromFileName(currentFileName))
+    }
+
     var inputFileName by remember(currentFileName) {
-        val base = if (currentFileName.endsWith(".txt", ignoreCase = true)) {
-            currentFileName.removeSuffix(".txt")
-        } else {
-            currentFileName
-        }
+        val base = currentFileName
+            .removeSuffix(".txt").removeSuffix(".TXT")
+            .removeSuffix(".md").removeSuffix(".MD")
+            .removeSuffix(".docx").removeSuffix(".DOCX")
         mutableStateOf(base)
     }
 
@@ -211,7 +214,7 @@ fun SaveFileDialog(
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Text(
-                            ".txt",
+                            ".${selectedFormat.extension}",
                             color = Color(0xFF56D0DE),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
@@ -229,6 +232,44 @@ fun SaveFileDialog(
                 ),
                 shape = RoundedCornerShape(12.dp)
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Format Selection Chips (.txt, .md, .docx)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Format:",
+                    color = Color(0xFF64748B),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                com.example.logic.SupportedFileType.values().forEach { type ->
+                    val isSelected = selectedFormat == type
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) Color(0xFF56D0DE) else Color(0xFF26334D),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                            .clickable { selectedFormat = type },
+                        color = if (isSelected) Color(0xFF1E3A5F) else Color(0xFF131A29)
+                    ) {
+                        Text(
+                            text = ".${type.extension}",
+                            color = if (isSelected) Color(0xFF56D0DE) else Color(0xFF94A3B8),
+                            fontSize = 12.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(14.dp))
 
@@ -321,7 +362,8 @@ fun SaveFileDialog(
                                     )
                                 },
                                 onFastSave = {
-                                    val nameToUse = if (inputFileName.isBlank()) "document" else inputFileName
+                                    val base = if (inputFileName.isBlank()) "document" else inputFileName
+                                    val nameToUse = if (base.contains('.')) base else "$base.${selectedFormat.extension}"
                                     viewModel.saveToStarredFolder(folder, nameToUse)
                                 },
                                 onRemove = if (!folder.isDefault) {
@@ -342,9 +384,8 @@ fun SaveFileDialog(
                 OutlinedButton(
                     onClick = {
                         viewModel.closeSaveDialog()
-                        val nameToUse = if (inputFileName.isBlank()) "document.txt" else {
-                            if (inputFileName.endsWith(".txt", ignoreCase = true)) inputFileName else "$inputFileName.txt"
-                        }
+                        val base = if (inputFileName.isBlank()) "document" else inputFileName
+                        val nameToUse = if (base.contains('.')) base else "$base.${selectedFormat.extension}"
                         onBrowseSystemFolders(nameToUse)
                     },
                     modifier = Modifier
@@ -381,9 +422,8 @@ fun SaveFileDialog(
                 ) {
                     Button(
                         onClick = {
-                            val nameToUse = if (inputFileName.isBlank()) "document.txt" else {
-                                if (inputFileName.endsWith(".txt", ignoreCase = true)) inputFileName else "$inputFileName.txt"
-                            }
+                            val base = if (inputFileName.isBlank()) "document" else inputFileName
+                            val nameToUse = if (base.contains('.')) base else "$base.${selectedFormat.extension}"
                             if (!activeFolder.isTreeUri) {
                                 val targetFile = File(activeFolder.uriOrPath, nameToUse)
                                 viewModel.saveToFile(targetFile)
@@ -485,11 +525,12 @@ fun SaveFileDialog(
                                     )
                                 },
                                 onFileClick = {
-                                    inputFileName = if (entry.name.endsWith(".txt", ignoreCase = true)) {
-                                        entry.name.removeSuffix(".txt")
-                                    } else {
-                                        entry.name
-                                    }
+                                    val cleaned = entry.name
+                                        .removeSuffix(".txt").removeSuffix(".TXT")
+                                        .removeSuffix(".md").removeSuffix(".MD")
+                                        .removeSuffix(".docx").removeSuffix(".DOCX")
+                                    inputFileName = cleaned
+                                    selectedFormat = com.example.logic.SupportedFileType.fromFileName(entry.name)
                                     overwriteTargetFile = entry
                                 }
                             )

@@ -85,6 +85,8 @@ fun EditorScreen(
 
     val displayFileName = remember(fileName) {
         fileName.removeSuffix(".txt").removeSuffix(".TXT")
+            .removeSuffix(".md").removeSuffix(".MD")
+            .removeSuffix(".docx").removeSuffix(".DOCX")
     }
 
     var showMoreControlsSheetState by remember { mutableStateOf(false) }
@@ -333,7 +335,17 @@ fun EditorScreen(
                                 },
                                 onClick = {
                                     menuExpanded = false
-                                    openDocumentLauncher.launch(arrayOf("text/*"))
+                                    openDocumentLauncher.launch(
+                                        arrayOf(
+                                            "text/*",
+                                            "text/plain",
+                                            "text/markdown",
+                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                            "application/msword",
+                                            "application/octet-stream",
+                                            "*/*"
+                                        )
+                                    )
                                 }
                             )
                             DropdownMenuItem(
