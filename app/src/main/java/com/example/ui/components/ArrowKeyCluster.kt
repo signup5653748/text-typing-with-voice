@@ -2,10 +2,8 @@ package com.example.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.indication
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -15,21 +13,19 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 
 @Composable
 fun ArrowKeyCluster(
@@ -176,36 +172,23 @@ private fun SelCenterButton(
 
 @Composable
 fun Modifier.instantClickable(
-    debounceMs: Long = 120L,
+    debounceMs: Long = 80L,
     minPressDurationMs: Long = 0L,
     onClick: () -> Unit
 ): Modifier {
     val currentOnClick by androidx.compose.runtime.rememberUpdatedState(onClick)
     val interactionSource = remember { MutableInteractionSource() }
-    val coroutineScope = rememberCoroutineScope()
     val lastClickTime = remember { androidx.compose.runtime.mutableLongStateOf(0L) }
 
-    return this
-        .indication(interactionSource, androidx.compose.foundation.LocalIndication.current)
-        .pointerInput(Unit) {
-            detectTapGestures(
-                onPress = { offset ->
-                    val press = PressInteraction.Press(offset)
-                    coroutineScope.launch { interactionSource.emit(press) }
-                    val released = tryAwaitRelease()
-                    if (released) {
-                        coroutineScope.launch { interactionSource.emit(PressInteraction.Release(press)) }
-                    } else {
-                        coroutineScope.launch { interactionSource.emit(PressInteraction.Cancel(press)) }
-                    }
-                },
-                onTap = {
-                    val now = System.currentTimeMillis()
-                    if (now - lastClickTime.longValue >= debounceMs) {
-                        lastClickTime.longValue = now
-                        currentOnClick()
-                    }
-                }
-            )
+    return this.clickable(
+        interactionSource = interactionSource,
+        indication = ripple(),
+        onClick = {
+            val now = System.currentTimeMillis()
+            if (now - lastClickTime.longValue >= debounceMs) {
+                lastClickTime.longValue = now
+                currentOnClick()
+            }
         }
+    )
 }
