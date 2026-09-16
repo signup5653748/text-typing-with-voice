@@ -29,9 +29,10 @@ fun LayoutSettingsScreen(
     val settings by viewModel.settings.collectAsState()
 
     var buttonOrder by remember(settings.buttonOrder) {
-        val list = settings.buttonOrder.split(",").filter { it.isNotBlank() }
+        val list = settings.buttonOrder.split(",").map { it.trim() }
+            .filter { it.isNotBlank() && it != "MORE" && it != "REPLACE" && it != "REP" }
         if (list.size < 6) {
-            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "MORE", "REPLACE", "K", "P", "KB_LOCK"))
+            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "K", "P", "KB_LOCK"))
         } else {
             mutableStateOf(list)
         }
@@ -46,8 +47,6 @@ fun LayoutSettingsScreen(
         "ENTER" to "Enter Line (ENTER)",
         "TOP" to "Top of Document (TOP)",
         "END" to "End of Document (END)",
-        "MORE" to "More Menu (MORE)",
-        "REPLACE" to "Voice Replace (REP)",
         "K" to "K Char/Word (K)",
         "P" to "P Para/Line (P)",
         "KB_LOCK" to "Keyboard Lock (KB)"

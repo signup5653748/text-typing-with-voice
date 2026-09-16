@@ -15,12 +15,11 @@ import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentCut
 import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.FindReplace
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.KeyboardHide
-import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.TextFields
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VerticalAlignBottom
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.Icon
@@ -36,22 +35,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ActionButton
 
-private val DEFAULT_3X3_BUTTONS = listOf(
+private val DEFAULT_KEYPAD_BUTTONS = listOf(
     "CUT", "COPY", "DELETE",
-    "PASTE", "SELECT_ALL", "ENTER",
-    "JUMP_TO", "TOP", "END",
-    "MORE", "REPLACE", "K", "P", "KB_LOCK"
+    "PASTE", "SELECT_ALL", "ENTER"
 )
 
 @Composable
 fun ActionButtonGrid(
     onActionClick: (ActionButton) -> Unit,
-    onMoreClick: () -> Unit,
-    buttonOrder: List<String> = DEFAULT_3X3_BUTTONS,
+    buttonOrder: List<String> = DEFAULT_KEYPAD_BUTTONS,
     sizeMultiplier: Float = 1.0f,
     modifier: Modifier = Modifier
 ) {
-    val buttonList = if (buttonOrder.isNotEmpty()) buttonOrder else DEFAULT_3X3_BUTTONS
+    val buttonList = (if (buttonOrder.isNotEmpty()) buttonOrder else DEFAULT_KEYPAD_BUTTONS)
+        .filter { it.uppercase() != "MORE" && it.uppercase() != "REPLACE" && it.uppercase() != "REP" }
+        .ifEmpty { DEFAULT_KEYPAD_BUTTONS }
     val spacing = 6.dp
 
     BoxWithConstraints(
@@ -70,7 +68,6 @@ fun ActionButtonGrid(
                 DynamicActionButton(
                     type = btnType,
                     onActionClick = onActionClick,
-                    onMoreClick = onMoreClick,
                     sizeMultiplier = sizeMultiplier,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -85,7 +82,6 @@ fun ActionButtonGrid(
 private fun DynamicActionButton(
     type: String,
     onActionClick: (ActionButton) -> Unit,
-    onMoreClick: () -> Unit,
     sizeMultiplier: Float,
     modifier: Modifier = Modifier
 ) {
@@ -172,24 +168,6 @@ private fun DynamicActionButton(
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )
-        "REPLACE", "REP" -> KeypadActionButton(
-            label = "REP",
-            icon = Icons.Default.FindReplace,
-            iconColor = Color(0xFF56D0DE),
-            textColor = Color(0xFF56D0DE),
-            onClick = { onActionClick(ActionButton.REPLACE) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "MORE" -> KeypadActionButton(
-            label = "MORE",
-            icon = Icons.Default.MoreHoriz,
-            iconColor = Color(0xFF8FA7D8),
-            textColor = Color(0xFF8FA7D8),
-            onClick = onMoreClick,
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
         "K" -> KeypadActionButton(
             label = "K",
             icon = Icons.Default.TextFields,
@@ -219,10 +197,10 @@ private fun DynamicActionButton(
         )
         else -> KeypadActionButton(
             label = type,
-            icon = Icons.Default.MoreHoriz,
+            icon = Icons.Default.TouchApp,
             iconColor = Color(0xFF8FA7D8),
             textColor = Color(0xFF8FA7D8),
-            onClick = onMoreClick,
+            onClick = { /* no-op */ },
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )

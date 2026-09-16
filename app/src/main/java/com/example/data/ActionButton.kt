@@ -10,8 +10,6 @@ enum class ActionButton(val label: String) {
     JUMP_TO("JUMP"),
     TOP("TOP"),
     END("END"),
-    MORE("MORE"),
-    REPLACE("REP"),
     K("K"),
     P("P"),
     KB_LOCK("KB")

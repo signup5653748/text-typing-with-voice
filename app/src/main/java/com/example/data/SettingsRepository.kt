@@ -49,9 +49,9 @@ data class SettingsEntity(
     // Layout
     val arrowSize: Float = 1.0f,
     val buttonSizeMultiplier: Float = 1.0f,
-    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
+    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,TOP,END,K,P,KB_LOCK",
     val hiddenElements: String = "",
-    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
+    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,TOP,END,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
     // Advanced & Granular Feedback Settings
     val advancedSettingsEnabled: Boolean = false,
     val disabledSpeechFeedbackButtons: String = "", // comma-separated button action names

@@ -104,8 +104,10 @@ fun EditorScreen(
 
     var menuExpanded by remember { mutableStateOf(false) }
     val buttonOrderList = remember(settings.buttonOrder) {
-        val list = settings.buttonOrder.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-        if (list.isNotEmpty()) list else listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "MORE", "REPLACE", "K", "P", "KB_LOCK")
+        val list = settings.buttonOrder.split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && it != "MORE" && it != "REPLACE" && it != "REP" }
+        if (list.isNotEmpty()) list else listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "K", "P", "KB_LOCK")
     }
 
     val highlightColor = remember(settings.highlightColorHex) {
@@ -546,10 +548,9 @@ fun EditorScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Side: 2x3 Grid
+                    // Left Side: Action Grid
                     ActionButtonGrid(
                         onActionClick = viewModel::onAction,
-                        onMoreClick = { showMoreControlsSheetState = true },
                         buttonOrder = buttonOrderList,
                         sizeMultiplier = settings.buttonSizeMultiplier,
                         modifier = Modifier

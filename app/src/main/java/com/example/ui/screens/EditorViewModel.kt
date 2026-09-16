@@ -1097,10 +1097,6 @@ class EditorViewModel(
             ActionButton.JUMP_TO -> openJumpTo()
             ActionButton.TOP -> jumpStart()
             ActionButton.END -> jumpEnd()
-            ActionButton.REPLACE -> openVoiceReplacePopup()
-            ActionButton.MORE -> {
-                // Handled via onMoreClick or caller
-            }
             else -> {
                 val current = _textValue.value
                 val hasSelection = current.selection.start != current.selection.end
