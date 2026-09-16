@@ -15,7 +15,9 @@ import kotlin.math.min
 class SelectionHighlightTransformation(
     private val selection: TextRange,
     private val transientHighlight: TextRange? = null,
+    private val speechHighlight: TextRange? = null,
     private val highlightColor: Color = Color(0xFFFFD600).copy(alpha = 0.55f),
+    private val speechHighlightColor: Color = Color(0xFF00E5FF),
     private val highlightedTextColor: Color = Color.White,
     private val hideHeadingSymbols: Boolean = true
 ) : VisualTransformation {
@@ -26,27 +28,42 @@ class SelectionHighlightTransformation(
         // Case 1: Raw symbols visible (no hide-on-render transform)
         if (!hideHeadingSymbols || origText.isEmpty()) {
             val effectiveRange = getEffectiveRange()
-            if (effectiveRange == null) {
-                return TransformedText(text, OffsetMapping.Identity)
-            }
+            val speechRange = getSpeechRange(origText.length)
 
-            val start = min(effectiveRange.start, effectiveRange.end).coerceIn(0, origText.length)
-            val end = max(effectiveRange.start, effectiveRange.end).coerceIn(0, origText.length)
-
-            if (start >= end) {
+            if (effectiveRange == null && speechRange == null) {
                 return TransformedText(text, OffsetMapping.Identity)
             }
 
             val annotated = buildAnnotatedString {
                 append(origText)
-                addStyle(
-                    SpanStyle(
-                        background = highlightColor,
-                        color = highlightedTextColor
-                    ),
-                    start,
-                    end
-                )
+                if (effectiveRange != null) {
+                    val start = min(effectiveRange.start, effectiveRange.end).coerceIn(0, origText.length)
+                    val end = max(effectiveRange.start, effectiveRange.end).coerceIn(0, origText.length)
+                    if (start < end) {
+                        addStyle(
+                            SpanStyle(
+                                background = if (speechRange != null) highlightColor.copy(alpha = 0.35f) else highlightColor,
+                                color = highlightedTextColor
+                            ),
+                            start,
+                            end
+                        )
+                    }
+                }
+                if (speechRange != null) {
+                    val sStart = min(speechRange.start, speechRange.end).coerceIn(0, origText.length)
+                    val sEnd = max(speechRange.start, speechRange.end).coerceIn(0, origText.length)
+                    if (sStart < sEnd) {
+                        addStyle(
+                            SpanStyle(
+                                background = speechHighlightColor,
+                                color = Color(0xFF090D16)
+                            ),
+                            sStart,
+                            sEnd
+                        )
+                    }
+                }
             }
             return TransformedText(annotated, OffsetMapping.Identity)
         }
@@ -107,33 +124,57 @@ class SelectionHighlightTransformation(
         }
 
         val effectiveRange = getEffectiveRange()
+        val speechRange = getSpeechRange(origLen)
         val transformedTextStr = transBuilder.toString()
 
-        if (effectiveRange == null) {
+        if (effectiveRange == null && speechRange == null) {
             return TransformedText(AnnotatedString(transformedTextStr), offsetMapping)
         }
 
-        val origStart = min(effectiveRange.start, effectiveRange.end).coerceIn(0, origLen)
-        val origEnd = max(effectiveRange.start, effectiveRange.end).coerceIn(0, origLen)
-
-        val transStart = offsetMapping.originalToTransformed(origStart).coerceIn(0, transformedTextStr.length)
-        val transEnd = offsetMapping.originalToTransformed(origEnd).coerceIn(0, transformedTextStr.length)
-
         val annotated = buildAnnotatedString {
             append(transformedTextStr)
-            if (transStart < transEnd) {
-                addStyle(
-                    SpanStyle(
-                        background = highlightColor,
-                        color = highlightedTextColor
-                    ),
-                    transStart,
-                    transEnd
-                )
+            if (effectiveRange != null) {
+                val origStart = min(effectiveRange.start, effectiveRange.end).coerceIn(0, origLen)
+                val origEnd = max(effectiveRange.start, effectiveRange.end).coerceIn(0, origLen)
+                val transStart = offsetMapping.originalToTransformed(origStart).coerceIn(0, transformedTextStr.length)
+                val transEnd = offsetMapping.originalToTransformed(origEnd).coerceIn(0, transformedTextStr.length)
+                if (transStart < transEnd) {
+                    addStyle(
+                        SpanStyle(
+                            background = if (speechRange != null) highlightColor.copy(alpha = 0.35f) else highlightColor,
+                            color = highlightedTextColor
+                        ),
+                        transStart,
+                        transEnd
+                    )
+                }
+            }
+            if (speechRange != null) {
+                val origStart = min(speechRange.start, speechRange.end).coerceIn(0, origLen)
+                val origEnd = max(speechRange.start, speechRange.end).coerceIn(0, origLen)
+                val transStart = offsetMapping.originalToTransformed(origStart).coerceIn(0, transformedTextStr.length)
+                val transEnd = offsetMapping.originalToTransformed(origEnd).coerceIn(0, transformedTextStr.length)
+                if (transStart < transEnd) {
+                    addStyle(
+                        SpanStyle(
+                            background = speechHighlightColor,
+                            color = Color(0xFF090D16)
+                        ),
+                        transStart,
+                        transEnd
+                    )
+                }
             }
         }
 
         return TransformedText(annotated, offsetMapping)
+    }
+
+    private fun getSpeechRange(maxLen: Int): TextRange? {
+        val range = speechHighlight ?: return null
+        val start = min(range.start, range.end).coerceIn(0, maxLen)
+        val end = max(range.start, range.end).coerceIn(0, maxLen)
+        return if (start < end) TextRange(start, end) else null
     }
 
     private fun getEffectiveRange(): TextRange? {

@@ -98,6 +98,11 @@ class EditorViewModel(
     private val _transientHighlightRange = MutableStateFlow<TextRange?>(null)
     val transientHighlightRange: StateFlow<TextRange?> = _transientHighlightRange.asStateFlow()
 
+    // Active spoken word highlight during TTS playback
+    private val _speechHighlightRange = MutableStateFlow<TextRange?>(null)
+    val speechHighlightRange: StateFlow<TextRange?> = _speechHighlightRange.asStateFlow()
+    private var speechPacingJob: kotlinx.coroutines.Job? = null
+
     // Search state
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -171,6 +176,16 @@ class EditorViewModel(
                 }
             }
         }
+
+        // Cancel speech pacing job and clear highlight when TTS finishes or stops
+        viewModelScope.launch {
+            ttsWrapper.isPlaying.collect { playing ->
+                if (!playing) {
+                    speechPacingJob?.cancel()
+                    _speechHighlightRange.value = null
+                }
+            }
+        }
     }
 
     fun keepEditingDraft() {
@@ -221,6 +236,11 @@ class EditorViewModel(
         }
         _textValue.value = newValue
         if (newValue.text != oldText) {
+            if (ttsWrapper.isPlaying.value) {
+                ttsWrapper.stop()
+            }
+            speechPacingJob?.cancel()
+            _speechHighlightRange.value = null
             cachedHeadings = null // Invalidate session cache on document edit
             if (_selActive.value) {
                 _selActive.value = false
@@ -532,18 +552,111 @@ class EditorViewModel(
     fun togglePlay() {
         if (ttsWrapper.isPlaying.value) {
             ttsWrapper.stop()
+            speechPacingJob?.cancel()
+            _speechHighlightRange.value = null
         } else {
-            val text = _textValue.value.text
-            if (text.isNotBlank()) {
-                val start = _textValue.value.selection.min
-                val textToRead = if (_textValue.value.selection.length > 0) {
-                    text.substring(_textValue.value.selection.min, _textValue.value.selection.max)
+            val docText = _textValue.value.text
+            if (docText.isNotBlank()) {
+                val hasExplicitSelection = _textValue.value.selection.length > 0
+                val (readStart, readEnd) = if (hasExplicitSelection) {
+                    Pair(_textValue.value.selection.min, _textValue.value.selection.max)
                 } else {
-                    text.substring(start)
+                    val cursor = _textValue.value.selection.min
+                    if (cursor < docText.length && docText.substring(cursor).isNotBlank()) {
+                        Pair(cursor, docText.length)
+                    } else {
+                        Pair(0, docText.length)
+                    }
                 }
-                // Strip leading heading square symbols so TTS never reads them aloud
-                val sanitizedTextToRead = HeadingLogic.stripHeadingSymbolsForTTS(textToRead)
-                ttsWrapper.play(sanitizedTextToRead, 0)
+
+                val textToRead = docText.substring(readStart, readEnd)
+                // Mask square symbols with spaces to retain 1:1 character indices matching docText
+                val sanitizedTextToRead = HeadingLogic.maskHeadingSymbolsForTTS(textToRead)
+
+                // Extract all words and their exact document ranges for active word highlighting
+                val wordRegex = Regex("\\b[\\p{L}\\p{N}']+\\b|\\S+")
+                val words = mutableListOf<SpokenWord>()
+                for (match in wordRegex.findAll(sanitizedTextToRead)) {
+                    val token = match.value
+                    if (token.any { it.isLetterOrDigit() }) {
+                        val wordStart = readStart + match.range.first
+                        val wordEnd = readStart + match.range.last + 1
+                        val nextIdx = match.range.last + 1
+                        val pauseAfter = if (nextIdx < sanitizedTextToRead.length) {
+                            when (sanitizedTextToRead[nextIdx]) {
+                                '.', '!', '?' -> 260L
+                                ',', ';', ':', '—', '-' -> 160L
+                                '\n' -> 220L
+                                else -> 0L
+                            }
+                        } else 0L
+                        words.add(SpokenWord(TextRange(wordStart, wordEnd), token, pauseAfter))
+                    }
+                }
+
+                ttsWrapper.play(sanitizedTextToRead, readStart)
+
+                speechPacingJob?.cancel()
+                speechPacingJob = viewModelScope.launch {
+                    // Small wait for TTS engine to start
+                    var waited = 0
+                    while (!ttsWrapper.isPlaying.value && waited < 20) {
+                        kotlinx.coroutines.delay(50)
+                        waited++
+                    }
+                    if (!ttsWrapper.isPlaying.value && words.isEmpty()) {
+                        _speechHighlightRange.value = null
+                        return@launch
+                    }
+
+                    val currentSpeed = settings.value.ttsSpeed.coerceIn(0.5f, 3.0f)
+                    var nativeRangeReported = false
+
+                    // Listen for native TTS utterance range updates (e.g. Google TTS onRangeStart)
+                    val nativeCollectorJob = launch {
+                        ttsWrapper.currentRange.collect { range ->
+                            if (range != null) {
+                                nativeRangeReported = true
+                                _speechHighlightRange.value = TextRange(range.first, range.second)
+                            }
+                        }
+                    }
+
+                    try {
+                        for (item in words) {
+                            if (!ttsWrapper.isPlaying.value) break
+
+                            if (!nativeRangeReported) {
+                                _speechHighlightRange.value = item.docRange
+                            }
+
+                            val length = item.word.length
+                            val baseDuration = when {
+                                length <= 3 -> 200L
+                                length <= 6 -> 300L
+                                length <= 9 -> 400L
+                                else -> 500L
+                            }
+                            val wordDuration = ((baseDuration + item.pauseAfterMs) / currentSpeed)
+                                .toLong()
+                                .coerceAtLeast(80L)
+
+                            val stepMs = 30L
+                            val steps = (wordDuration / stepMs).coerceAtLeast(1L)
+                            for (s in 0 until steps) {
+                                if (!ttsWrapper.isPlaying.value) break
+                                kotlinx.coroutines.delay(stepMs)
+                            }
+                        }
+
+                        while (ttsWrapper.isPlaying.value) {
+                            kotlinx.coroutines.delay(50L)
+                        }
+                    } finally {
+                        nativeCollectorJob.cancel()
+                        _speechHighlightRange.value = null
+                    }
+                }
             } else {
                 ttsWrapper.speakFeedback("Document is empty")
             }
@@ -1258,6 +1371,13 @@ class EditorViewModel(
     
     override fun onCleared() {
         super.onCleared()
+        speechPacingJob?.cancel()
         ttsWrapper.shutdown()
     }
 }
+
+private data class SpokenWord(
+    val docRange: TextRange,
+    val word: String,
+    val pauseAfterMs: Long
+)

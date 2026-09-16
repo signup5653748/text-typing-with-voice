@@ -49,9 +49,9 @@ data class SettingsEntity(
     // Layout
     val arrowSize: Float = 1.0f,
     val buttonSizeMultiplier: Float = 1.0f,
-    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,TOP,END,K,P,KB_LOCK",
+    val buttonOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER",
     val hiddenElements: String = "",
-    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,TOP,END,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
+    val elementLayoutOrder: String = "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,DPAD,READ_BTN,MIC_BTN",
     // Advanced & Granular Feedback Settings
     val advancedSettingsEnabled: Boolean = false,
     val disabledSpeechFeedbackButtons: String = "", // comma-separated button action names
@@ -149,9 +149,9 @@ class SettingsRepository(private val context: Context) {
             ttsPitch = prefs[TTS_PITCH] ?: 1.0f,
             arrowSize = prefs[ARROW_SIZE] ?: 1.0f,
             buttonSizeMultiplier = prefs[BUTTON_SIZE_MULTIPLIER] ?: 1.0f,
-            buttonOrder = prefs[BUTTON_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK",
+            buttonOrder = prefs[BUTTON_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER",
             hiddenElements = prefs[HIDDEN_ELEMENTS] ?: "",
-            elementLayoutOrder = prefs[ELEMENT_LAYOUT_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,JUMP_TO,TOP,END,MORE,REPLACE,K,P,KB_LOCK,DPAD,READ_BTN,MIC_BTN",
+            elementLayoutOrder = prefs[ELEMENT_LAYOUT_ORDER] ?: "CUT,COPY,DELETE,PASTE,SELECT_ALL,ENTER,DPAD,READ_BTN,MIC_BTN",
             advancedSettingsEnabled = prefs[ADVANCED_SETTINGS_ENABLED] ?: false,
             disabledSpeechFeedbackButtons = prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "",
             hapticFeedbackEnabled = prefs[HAPTIC_FEEDBACK_ENABLED] ?: true,

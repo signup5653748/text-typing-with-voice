@@ -154,21 +154,20 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
-    fun play(text: String, startOffset: Int = 0) {
-        val sanitized = HeadingLogic.stripHeadingSymbolsForTTS(text)
+    fun play(textToRead: String, documentStartOffset: Int = 0) {
+        val sanitized = HeadingLogic.maskHeadingSymbolsForTTS(textToRead)
         if (tts == null || !isInitialized) {
             pendingText = sanitized
-            pendingStartOffset = startOffset
+            pendingStartOffset = documentStartOffset
             if (!isInitializing) {
                 initializeTTS(currentEnginePkg)
             }
             return
         }
-        val textToRead = sanitized.substring(startOffset.coerceIn(0, sanitized.length))
-        if (textToRead.isBlank()) return
+        if (sanitized.isBlank()) return
         
-        currentStartOffset = startOffset
-        tts?.speak(textToRead, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID_${System.currentTimeMillis()}")
+        currentStartOffset = documentStartOffset
+        tts?.speak(sanitized, TextToSpeech.QUEUE_FLUSH, null, "TTS_ID_${System.currentTimeMillis()}")
         _isPlaying.value = true
     }
 

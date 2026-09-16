@@ -82,6 +82,7 @@ fun EditorScreen(
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
     val isPlaying by viewModel.ttsWrapper.isPlaying.collectAsState()
     val transientHighlightRange by viewModel.transientHighlightRange.collectAsState()
+    val speechHighlightRange by viewModel.speechHighlightRange.collectAsState()
 
     val displayFileName = remember(fileName) {
         fileName.removeSuffix(".txt").removeSuffix(".TXT")
@@ -104,10 +105,11 @@ fun EditorScreen(
 
     var menuExpanded by remember { mutableStateOf(false) }
     val buttonOrderList = remember(settings.buttonOrder) {
+        val excluded = setOf("MORE", "REPLACE", "REP", "K", "P", "KB", "KB_LOCK", "TOP", "END", "JUMP", "JUMP_TO")
         val list = settings.buttonOrder.split(",")
-            .map { it.trim() }
-            .filter { it.isNotEmpty() && it != "MORE" && it != "REPLACE" && it != "REP" }
-        if (list.isNotEmpty()) list else listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "K", "P", "KB_LOCK")
+            .map { it.trim().uppercase() }
+            .filter { it.isNotEmpty() && it !in excluded }
+        if (list.isNotEmpty()) list else listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER")
     }
 
     val highlightColor = remember(settings.highlightColorHex) {
@@ -434,6 +436,7 @@ fun EditorScreen(
                     viewModel = viewModel,
                     kbLockActive = kbLockActive,
                     transientHighlightRange = transientHighlightRange,
+                    speechHighlightRange = speechHighlightRange,
                     onTextLayout = { layoutResult.value = it },
                     modifier = Modifier
                         .fillMaxSize()
@@ -805,6 +808,7 @@ fun EditorTextArea(
     viewModel: EditorViewModel,
     kbLockActive: Boolean,
     transientHighlightRange: TextRange?,
+    speechHighlightRange: TextRange?,
     onTextLayout: (TextLayoutResult) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -821,8 +825,8 @@ fun EditorTextArea(
 
     // Blinking cursor animation - only runs when keyboard is unlocked and no highlight is active
     val cursorAlpha = remember { Animatable(1f) }
-    LaunchedEffect(textValue.selection, kbLockActive, transientHighlightRange) {
-        if (kbLockActive || textValue.selection.length > 0 || transientHighlightRange != null) {
+    LaunchedEffect(textValue.selection, kbLockActive, transientHighlightRange, speechHighlightRange) {
+        if (kbLockActive || textValue.selection.length > 0 || transientHighlightRange != null || speechHighlightRange != null) {
             cursorAlpha.snapTo(0f)
         } else {
             while (true) {
@@ -871,12 +875,14 @@ fun EditorTextArea(
                     fontSize = textSize,
                     lineHeight = lineHeight
                 ),
-                visualTransformation = remember(textValue.selection, transientHighlightRange, highlightColor, settings.hideHeadingSymbols) {
+                visualTransformation = remember(textValue.selection, transientHighlightRange, speechHighlightRange, highlightColor, settings.hideHeadingSymbols) {
                     val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
                     SelectionHighlightTransformation(
                         selection = textValue.selection,
                         transientHighlight = transientHighlightRange,
+                        speechHighlight = speechHighlightRange,
                         highlightColor = highlightColor.copy(alpha = 0.7f),
+                        speechHighlightColor = Color(0xFF00E5FF),
                         highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White,
                         hideHeadingSymbols = settings.hideHeadingSymbols
                     )

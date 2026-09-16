@@ -29,12 +29,13 @@ fun LayoutSettingsScreen(
     val settings by viewModel.settings.collectAsState()
 
     var buttonOrder by remember(settings.buttonOrder) {
-        val list = settings.buttonOrder.split(",").map { it.trim() }
-            .filter { it.isNotBlank() && it != "MORE" && it != "REPLACE" && it != "REP" }
+        val excluded = setOf("MORE", "REPLACE", "REP", "K", "P", "KB", "KB_LOCK", "TOP", "END", "JUMP", "JUMP_TO")
+        val list = settings.buttonOrder.split(",").map { it.trim().uppercase() }
+            .filter { it.isNotBlank() && it !in excluded }
         if (list.size < 6) {
-            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER", "TOP", "END", "K", "P", "KB_LOCK"))
+            mutableStateOf(listOf("CUT", "COPY", "DELETE", "PASTE", "SELECT_ALL", "ENTER"))
         } else {
-            mutableStateOf(list)
+            mutableStateOf(list.take(6))
         }
     }
 
@@ -44,12 +45,7 @@ fun LayoutSettingsScreen(
         "DELETE" to "Delete (DEL)",
         "PASTE" to "Paste (PASTE)",
         "SELECT_ALL" to "Select All (ALL)",
-        "ENTER" to "Enter Line (ENTER)",
-        "TOP" to "Top of Document (TOP)",
-        "END" to "End of Document (END)",
-        "K" to "K Char/Word (K)",
-        "P" to "P Para/Line (P)",
-        "KB_LOCK" to "Keyboard Lock (KB)"
+        "ENTER" to "Enter Line (ENTER)"
     )
 
     Scaffold(

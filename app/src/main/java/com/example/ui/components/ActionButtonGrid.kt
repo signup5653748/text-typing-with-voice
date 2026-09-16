@@ -35,6 +35,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.ActionButton
 
+private val EXCLUDED_GRID_BUTTONS = setOf(
+    "MORE", "REPLACE", "REP",
+    "K", "P", "KB", "KB_LOCK", "TOP", "END", "JUMP", "JUMP_TO"
+)
+
 private val DEFAULT_KEYPAD_BUTTONS = listOf(
     "CUT", "COPY", "DELETE",
     "PASTE", "SELECT_ALL", "ENTER"
@@ -48,9 +53,11 @@ fun ActionButtonGrid(
     modifier: Modifier = Modifier
 ) {
     val buttonList = (if (buttonOrder.isNotEmpty()) buttonOrder else DEFAULT_KEYPAD_BUTTONS)
-        .filter { it.uppercase() != "MORE" && it.uppercase() != "REPLACE" && it.uppercase() != "REP" }
+        .map { it.trim().uppercase() }
+        .filter { it !in EXCLUDED_GRID_BUTTONS }
         .ifEmpty { DEFAULT_KEYPAD_BUTTONS }
     val spacing = 6.dp
+    val numColumns = if (buttonList.size <= 6) 2 else 3
 
     BoxWithConstraints(
         modifier = modifier.fillMaxHeight()
@@ -59,7 +66,7 @@ fun ActionButtonGrid(
         val itemHeight = ((maxHeight - (spacing * 2)) / 3).coerceAtLeast(48.dp)
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
+            columns = GridCells.Fixed(numColumns),
             verticalArrangement = Arrangement.spacedBy(spacing),
             horizontalArrangement = Arrangement.spacedBy(spacing),
             modifier = Modifier.fillMaxSize()
@@ -141,66 +148,12 @@ private fun DynamicActionButton(
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )
-        "JUMP_TO", "JUMP" -> KeypadActionButton(
-            label = "JUMP",
-            icon = Icons.AutoMirrored.Filled.List,
-            iconColor = Color(0xFF56D0DE),
-            textColor = Color(0xFF56D0DE),
-            onClick = { onActionClick(ActionButton.JUMP_TO) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "TOP" -> KeypadActionButton(
-            label = "TOP",
-            icon = Icons.Default.VerticalAlignTop,
-            iconColor = Color(0xFF8FA7D8),
-            textColor = Color(0xFF8FA7D8),
-            onClick = { onActionClick(ActionButton.TOP) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "END" -> KeypadActionButton(
-            label = "END",
-            icon = Icons.Default.VerticalAlignBottom,
-            iconColor = Color(0xFF8FA7D8),
-            textColor = Color(0xFF8FA7D8),
-            onClick = { onActionClick(ActionButton.END) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "K" -> KeypadActionButton(
-            label = "K",
-            icon = Icons.Default.TextFields,
-            iconColor = Color(0xFF56D0DE),
-            textColor = Color(0xFF56D0DE),
-            onClick = { onActionClick(ActionButton.K) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "P" -> KeypadActionButton(
-            label = "P",
-            icon = Icons.Default.FormatAlignLeft,
-            iconColor = Color(0xFF56D0DE),
-            textColor = Color(0xFF56D0DE),
-            onClick = { onActionClick(ActionButton.P) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
-        "KB_LOCK", "KB" -> KeypadActionButton(
-            label = "KB",
-            icon = Icons.Default.KeyboardHide,
-            iconColor = Color(0xFFFF6584),
-            textColor = Color(0xFFFF6584),
-            onClick = { onActionClick(ActionButton.KB_LOCK) },
-            sizeMultiplier = sizeMultiplier,
-            modifier = modifier
-        )
         else -> KeypadActionButton(
             label = type,
             icon = Icons.Default.TouchApp,
             iconColor = Color(0xFF8FA7D8),
             textColor = Color(0xFF8FA7D8),
-            onClick = { /* no-op */ },
+            onClick = {},
             sizeMultiplier = sizeMultiplier,
             modifier = modifier
         )

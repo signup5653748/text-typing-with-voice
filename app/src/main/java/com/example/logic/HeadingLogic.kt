@@ -80,6 +80,23 @@ object HeadingLogic {
     }
 
     /**
+     * Replaces heading square symbols and variation selectors with spaces so that
+     * the text length and character indices match the original document 1:1, ensuring
+     * TTS spoken word highlights line up with exact document coordinates.
+     */
+    fun maskHeadingSymbolsForTTS(text: String): String {
+        if (text.isEmpty()) return text
+        val chars = text.toCharArray()
+        for (i in chars.indices) {
+            val c = chars[i]
+            if (isHeadingSquareChar(c) || c == VARIATION_SELECTOR_16) {
+                chars[i] = ' '
+            }
+        }
+        return String(chars)
+    }
+
+    /**
      * Scans the document text line by line and collects all heading items.
      * Returns a list of HeadingItem with line numbers, levels (1..15), symbols, and text.
      */
