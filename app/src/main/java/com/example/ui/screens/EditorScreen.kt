@@ -5,7 +5,10 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -66,7 +69,8 @@ import kotlin.math.min
 @Composable
 fun EditorScreen(
     viewModel: EditorViewModel,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToReadingMode: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val textValue by viewModel.textValue.collectAsState()
@@ -149,280 +153,63 @@ fun EditorScreen(
     }
 
     Scaffold(
+        containerColor = editorBgColor,
         topBar = {
-            TopAppBar(
-                title = {
-                    if (showSearchBar) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            TextField(
-                                value = searchQuery,
-                                onValueChange = viewModel::updateSearchQuery,
-                                placeholder = { Text("Search text...", color = Color(0xFF6B7FA8), fontSize = 14.sp) },
-                                singleLine = true,
-                                colors = TextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    focusedIndicatorColor = Color.Transparent,
-                                    unfocusedIndicatorColor = Color.Transparent,
-                                    focusedTextColor = Color.White,
-                                    unfocusedTextColor = Color.White
-                                ),
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    } else {
-                        Column {
-                            Text(
-                                text = displayFileName,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFECEEF2)
-                            )
-                            if (kActive || pActive || selActive || kbLockActive) {
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    if (kActive) {
-                                        ModeIndicatorBadge(text = "K: CHAR", color = Color(0xFF56D0DE))
-                                    }
-                                    if (pActive) {
-                                        ModeIndicatorBadge(text = "P: PARA", color = Color(0xFF56D0DE))
-                                    }
-                                    if (selActive) {
-                                        ModeIndicatorBadge(text = "SEL ON", color = highlightColor)
-                                    }
-                                    if (kbLockActive) {
-                                        ModeIndicatorBadge(text = "KB LOCK", color = Color(0xFFFF6584))
-                                    }
-                                }
-                            }
-                        }
+            EditorTopBar(
+                showSearchBar = showSearchBar,
+                searchQuery = searchQuery,
+                searchMatches = searchMatches,
+                currentMatchIndex = currentMatchIndex,
+                displayFileName = displayFileName,
+                kActive = kActive,
+                pActive = pActive,
+                selActive = selActive,
+                kbLockActive = kbLockActive,
+                highlightColor = highlightColor,
+                canUndo = canUndo,
+                canRedo = canRedo,
+                menuExpanded = menuExpanded,
+                onMenuExpandedChange = { menuExpanded = it },
+                onSearchQueryChange = viewModel::updateSearchQuery,
+                onCloseSearch = {
+                    showSearchBar = false
+                    viewModel.clearSearch()
+                },
+                onPreviousMatch = { viewModel.previousSearchMatch() },
+                onNextMatch = { viewModel.nextSearchMatch() },
+                onUndo = { viewModel.undo() },
+                onOpenSearch = {
+                    showSearchBar = true
+                    if (searchQuery.isNotEmpty()) {
+                        viewModel.updateSearchQuery(searchQuery)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF0F1420)
-                ),
-                actions = {
-                    if (showSearchBar) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (searchMatches.isNotEmpty()) {
-                                Text(
-                                    text = "${currentMatchIndex + 1}/${searchMatches.size}",
-                                    color = Color(0xFF56D0DE),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            IconButton(onClick = {
-                                showSearchBar = false
-                                viewModel.clearSearch()
-                            }) {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Close Search",
-                                    tint = Color(0xFF8FA7D8)
-                                )
-                            }
-
-                            // Previous Match
-                            IconButton(
-                                onClick = { viewModel.previousSearchMatch() },
-                                enabled = searchMatches.isNotEmpty()
-                            ) {
-                                Icon(
-                                    Icons.Default.KeyboardArrowUp,
-                                    contentDescription = "Previous Result",
-                                    tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
-                                )
-                            }
-
-                            // Next Match
-                            IconButton(
-                                onClick = { viewModel.nextSearchMatch() },
-                                enabled = searchMatches.isNotEmpty()
-                            ) {
-                                Icon(
-                                    Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Next Result",
-                                    tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
-                                )
-                            }
-                        }
-                    } else {
-                        IconButton(
-                            onClick = { viewModel.undo() },
-                            enabled = canUndo
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Undo,
-                                contentDescription = "Undo",
-                                tint = if (canUndo) Color(0xFF8FA7D8) else Color(0xFF4A5568)
-                            )
-                        }
-
-                        IconButton(onClick = {
-                            showSearchBar = true
-                            if (searchQuery.isNotEmpty()) {
-                                viewModel.updateSearchQuery(searchQuery)
-                            }
-                        }) {
-                            Icon(
-                                Icons.Default.Search,
-                                contentDescription = "Search",
-                                tint = Color(0xFF8FA7D8)
-                            )
-                        }
-
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "Menu",
-                                tint = Color(0xFF8FA7D8)
-                            )
-                        }
-                    }
-                    MaterialTheme(
-                        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(14.dp))
-                    ) {
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                            modifier = Modifier
-                                .width(230.dp)
-                                .background(Color(0xFF161E30))
-                                .border(1.dp, Color(0xFF26344E), RoundedCornerShape(14.dp))
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Redo", color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF6B7FA8), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Redo,
-                                        contentDescription = "Redo",
-                                        tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                enabled = canRedo,
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.redo()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("New File", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.AddCircleOutline,
-                                        contentDescription = "New",
-                                        tint = Color(0xFF56D0DE),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.newFile()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Open...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.FolderOpen,
-                                        contentDescription = "Open",
-                                        tint = Color(0xFFFFC700),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    openDocumentLauncher.launch(
-                                        arrayOf(
-                                            "text/*",
-                                            "text/plain",
-                                            "text/markdown",
-                                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                            "application/msword",
-                                            "application/octet-stream",
-                                            "*/*"
-                                        )
-                                    )
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Save", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Save,
-                                        contentDescription = "Save",
-                                        tint = Color(0xFF32D796),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.saveCurrentFile()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Save As...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.SaveAs,
-                                        contentDescription = "Save As",
-                                        tint = Color(0xFF8FA7D8),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.openSaveDialog(isSaveAs = true)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Jump to...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.FormatListBulleted,
-                                        contentDescription = "Jump to",
-                                        tint = Color(0xFF56D0DE),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.openJumpTo()
-                                }
-                            )
-                            HorizontalDivider(color = Color(0xFF222B3F), modifier = Modifier.padding(vertical = 4.dp))
-                            DropdownMenuItem(
-                                text = { Text("Settings", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Settings",
-                                        tint = Color(0xFF8FA7D8),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    onNavigateToSettings()
-                                }
-                            )
-                        }
-                    }
-                }
+                onNavigateToReadingMode = onNavigateToReadingMode,
+                onRedo = { viewModel.redo() },
+                onNewFile = { viewModel.newFile() },
+                onOpenFile = {
+                    openDocumentLauncher.launch(
+                        arrayOf(
+                            "text/*",
+                            "text/plain",
+                            "text/markdown",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/msword",
+                            "application/octet-stream",
+                            "*/*"
+                        )
+                    )
+                },
+                onSaveCurrentFile = { viewModel.saveCurrentFile() },
+                onOpenSaveAsDialog = { viewModel.openSaveDialog(isSaveAs = true) },
+                onOpenJumpTo = { viewModel.openJumpTo() },
+                onNavigateToSettings = onNavigateToSettings
             )
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(editorBgColor)
                 .padding(padding)
         ) {
             // Main Text Canvas with Floating READ and MIC buttons
@@ -430,7 +217,6 @@ fun EditorScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(editorBgColor)
             ) {
                 EditorTextArea(
                     viewModel = viewModel,
@@ -614,6 +400,305 @@ fun EditorScreen(
     }
 
     SessionResumeDialog(viewModel = viewModel)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditorTopBar(
+    showSearchBar: Boolean,
+    searchQuery: String,
+    searchMatches: List<IntRange>,
+    currentMatchIndex: Int,
+    displayFileName: String,
+    kActive: Boolean,
+    pActive: Boolean,
+    selActive: Boolean,
+    kbLockActive: Boolean,
+    highlightColor: Color,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    menuExpanded: Boolean,
+    onMenuExpandedChange: (Boolean) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onCloseSearch: () -> Unit,
+    onPreviousMatch: () -> Unit,
+    onNextMatch: () -> Unit,
+    onUndo: () -> Unit,
+    onOpenSearch: () -> Unit,
+    onNavigateToReadingMode: () -> Unit,
+    onRedo: () -> Unit,
+    onNewFile: () -> Unit,
+    onOpenFile: () -> Unit,
+    onSaveCurrentFile: () -> Unit,
+    onOpenSaveAsDialog: () -> Unit,
+    onOpenJumpTo: () -> Unit,
+    onNavigateToSettings: () -> Unit
+) {
+    TopAppBar(
+        title = {
+            if (showSearchBar) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        placeholder = { Text("Search text...", color = Color(0xFF6B7FA8), fontSize = 14.sp) },
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
+                        ),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                Column {
+                    Text(
+                        text = displayFileName,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFECEEF2)
+                    )
+                    if (kActive || pActive || selActive || kbLockActive) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (kActive) {
+                                ModeIndicatorBadge(text = "K: CHAR", color = Color(0xFF56D0DE))
+                            }
+                            if (pActive) {
+                                ModeIndicatorBadge(text = "P: PARA", color = Color(0xFF56D0DE))
+                            }
+                            if (selActive) {
+                                ModeIndicatorBadge(text = "SEL ON", color = highlightColor)
+                            }
+                            if (kbLockActive) {
+                                ModeIndicatorBadge(text = "KB LOCK", color = Color(0xFFFF6584))
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color(0xFF0F1420)
+        ),
+        actions = {
+            if (showSearchBar) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (searchMatches.isNotEmpty()) {
+                        Text(
+                            text = "${currentMatchIndex + 1}/${searchMatches.size}",
+                            color = Color(0xFF56D0DE),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    IconButton(onClick = onCloseSearch) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Close Search",
+                            tint = Color(0xFF8FA7D8)
+                        )
+                    }
+
+                    // Previous Match
+                    IconButton(
+                        onClick = onPreviousMatch,
+                        enabled = searchMatches.isNotEmpty()
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardArrowUp,
+                            contentDescription = "Previous Result",
+                            tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
+                        )
+                    }
+
+                    // Next Match
+                    IconButton(
+                        onClick = onNextMatch,
+                        enabled = searchMatches.isNotEmpty()
+                    ) {
+                        Icon(
+                            Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Next Result",
+                            tint = if (searchMatches.isNotEmpty()) Color.White else Color(0xFF4A5568)
+                        )
+                    }
+                }
+            } else {
+                IconButton(
+                    onClick = onUndo,
+                    enabled = canUndo
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Undo,
+                        contentDescription = "Undo",
+                        tint = if (canUndo) Color(0xFF8FA7D8) else Color(0xFF4A5568)
+                    )
+                }
+
+                IconButton(onClick = onOpenSearch) {
+                    Icon(
+                        Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = Color(0xFF8FA7D8)
+                    )
+                }
+
+                IconButton(onClick = { onMenuExpandedChange(true) }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Menu",
+                        tint = Color(0xFF8FA7D8)
+                    )
+                }
+            }
+            MaterialTheme(
+                shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(14.dp))
+            ) {
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { onMenuExpandedChange(false) },
+                    modifier = Modifier
+                        .width(230.dp)
+                        .background(Color(0xFF161E30))
+                        .border(1.dp, Color(0xFF26344E), RoundedCornerShape(14.dp))
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Reading Mode", color = Color(0xFFECEEF2), fontWeight = FontWeight.SemiBold, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.MenuBook,
+                                contentDescription = "Reading Mode",
+                                tint = Color(0xFF56D0DE),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onNavigateToReadingMode()
+                        }
+                    )
+                    HorizontalDivider(color = Color(0xFF222B3F), modifier = Modifier.padding(vertical = 4.dp))
+                    DropdownMenuItem(
+                        text = { Text("Redo", color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF6B7FA8), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Redo,
+                                contentDescription = "Redo",
+                                tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        enabled = canRedo,
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onRedo()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("New File", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.AddCircleOutline,
+                                contentDescription = "New",
+                                tint = Color(0xFF56D0DE),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onNewFile()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Open...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = "Open",
+                                tint = Color(0xFFFFC700),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onOpenFile()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Save", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = "Save",
+                                tint = Color(0xFF32D796),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onSaveCurrentFile()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Save As...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.SaveAs,
+                                contentDescription = "Save As",
+                                tint = Color(0xFF8FA7D8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onOpenSaveAsDialog()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Jump to...", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.FormatListBulleted,
+                                contentDescription = "Jump to",
+                                tint = Color(0xFF56D0DE),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onOpenJumpTo()
+                        }
+                    )
+                    HorizontalDivider(color = Color(0xFF222B3F), modifier = Modifier.padding(vertical = 4.dp))
+                    DropdownMenuItem(
+                        text = { Text("Settings", color = Color(0xFFECEEF2), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = Color(0xFF8FA7D8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        onClick = {
+                            onMenuExpandedChange(false)
+                            onNavigateToSettings()
+                        }
+                    )
+                }
+            }
+        }
+    )
 }
 
 @Composable
@@ -823,18 +908,8 @@ fun EditorTextArea(
     var localLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    // Blinking cursor animation - only runs when keyboard is unlocked and no highlight is active
-    val cursorAlpha = remember { Animatable(1f) }
-    LaunchedEffect(textValue.selection, kbLockActive, transientHighlightRange, speechHighlightRange) {
-        if (kbLockActive || textValue.selection.length > 0 || transientHighlightRange != null || speechHighlightRange != null) {
-            cursorAlpha.snapTo(0f)
-        } else {
-            while (true) {
-                cursorAlpha.animateTo(0f, animationSpec = tween(500))
-                cursorAlpha.animateTo(1f, animationSpec = tween(500))
-            }
-        }
-    }
+    // Blinking cursor animation - declarative transition scoped only to cursor overlay
+    val isCursorVisible = !kbLockActive && textValue.selection.collapsed && transientHighlightRange == null && speechHighlightRange == null
 
     Box(
         modifier = modifier.then(
@@ -904,24 +979,49 @@ fun EditorTextArea(
             )
         }
 
-        if (!kbLockActive && textValue.selection.collapsed && transientHighlightRange == null) {
-            Canvas(modifier = Modifier.matchParentSize()) {
-                val layout = localLayoutResult
-                if (layout != null) {
-                    try {
-                        val maxLayoutOffset = layout.layoutInput.text.length
-                        val caret = textValue.selection.end.coerceIn(0, maxLayoutOffset)
-                        val rect = layout.getCursorRect(caret)
-                        drawRoundRect(
-                            color = highlightColor.copy(alpha = cursorAlpha.value),
-                            topLeft = Offset(rect.left, rect.top),
-                            size = Size(2.5.dp.toPx(), rect.height),
-                            cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
-                        )
-                    } catch (e: Exception) {
-                        // Ignore race condition between text edit and layout calculation
-                    }
-                }
+        if (isCursorVisible) {
+            BlinkingCursorOverlay(
+                layout = localLayoutResult,
+                caretOffset = textValue.selection.end,
+                highlightColor = highlightColor,
+                modifier = Modifier.matchParentSize()
+            )
+        }
+    }
+}
+
+@Composable
+private fun BlinkingCursorOverlay(
+    layout: TextLayoutResult?,
+    caretOffset: Int,
+    highlightColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "CursorBlink")
+    val cursorAlpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "CursorAlpha"
+    )
+
+    Canvas(modifier = modifier) {
+        if (layout != null) {
+            try {
+                val maxLayoutOffset = layout.layoutInput.text.length
+                val caret = caretOffset.coerceIn(0, maxLayoutOffset)
+                val rect = layout.getCursorRect(caret)
+                drawRoundRect(
+                    color = highlightColor.copy(alpha = cursorAlpha),
+                    topLeft = Offset(rect.left, rect.top),
+                    size = Size(2.5.dp.toPx(), rect.height),
+                    cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+                )
+            } catch (e: Exception) {
+                // Ignore race condition between text edit and layout calculation
             }
         }
     }

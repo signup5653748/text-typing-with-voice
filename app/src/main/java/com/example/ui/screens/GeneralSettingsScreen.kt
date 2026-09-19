@@ -62,6 +62,7 @@ fun GeneralSettingsScreen(
     val settings by viewModel.settings.collectAsState()
 
     Scaffold(
+        containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
@@ -90,12 +91,11 @@ fun GeneralSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0C0D10))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Theme Preset Selector Card
-            item {
+            item(key = "theme_preset_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -153,7 +153,7 @@ fun GeneralSettingsScreen(
             }
 
             // Colors Card (Highlight, Background, Text)
-            item {
+            item(key = "colors_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -195,7 +195,7 @@ fun GeneralSettingsScreen(
             }
 
             // Text Size Card
-            item {
+            item(key = "text_size_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -248,7 +248,7 @@ fun GeneralSettingsScreen(
             }
 
             // Headings Display Settings Card
-            item {
+            item(key = "headings_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -291,7 +291,7 @@ fun GeneralSettingsScreen(
             }
 
             // Always insert mic text directly Toggle Card
-            item {
+            item(key = "mic_insert_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),

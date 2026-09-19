@@ -32,8 +32,13 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     private var currentPitch: Float = 1.0f
 
     init {
-        // Initialize immediately to be ready
-        initializeTTS()
+        // Deferred initialization: TTS engine connects on-demand upon first playback, feedback, or settings query
+    }
+
+    fun ensureInitialized(enginePkg: String? = null) {
+        if (tts == null && !isInitializing && !isInitialized) {
+            initializeTTS(enginePkg ?: currentEnginePkg)
+        }
     }
 
     private fun initializeTTS(enginePkg: String? = null) {
@@ -135,6 +140,7 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun getAvailableEngines(): List<TextToSpeech.EngineInfo> {
+        ensureInitialized()
         return try {
             tts?.engines ?: emptyList()
         } catch (e: Exception) {
@@ -143,6 +149,7 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     }
 
     fun getAvailableVoicesOrLocales(): List<Locale> {
+        ensureInitialized()
         return try {
             if (isInitialized && tts != null) {
                 tts?.availableLanguages?.toList() ?: listOf(Locale.US, Locale.UK, Locale.CANADA, Locale.FRENCH, Locale.GERMAN, Locale.ITALIAN, Locale.JAPANESE, Locale.CHINESE, Locale("es", "ES"), Locale("hi", "IN"))
@@ -192,11 +199,15 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
 
     fun shutdown() {
         try {
+            tts?.setOnUtteranceProgressListener(null)
             tts?.stop()
             tts?.shutdown()
         } catch (_: Exception) {}
         tts = null
         isInitialized = false
         isInitializing = false
+        pendingText = null
+        _isPlaying.value = false
+        _currentRange.value = null
     }
 }

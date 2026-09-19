@@ -71,7 +71,7 @@ fun ActionButtonGrid(
             horizontalArrangement = Arrangement.spacedBy(spacing),
             modifier = Modifier.fillMaxSize()
         ) {
-            items(buttonList) { btnType ->
+            items(buttonList, key = { it }) { btnType ->
                 DynamicActionButton(
                     type = btnType,
                     onActionClick = onActionClick,

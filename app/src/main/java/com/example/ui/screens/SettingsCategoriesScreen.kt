@@ -33,6 +33,7 @@ fun SettingsCategoriesScreen(
     onNavigateToAdvanced: () -> Unit
 ) {
     Scaffold(
+        containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
@@ -61,11 +62,10 @@ fun SettingsCategoriesScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0C0D10))
                 .padding(horizontal = 16.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
+            item(key = "category_general") {
                 SettingsCategoryRow(
                     icon = Icons.Default.Palette,
                     iconBg = Color(0xFF2563EB).copy(alpha = 0.2f),
@@ -76,7 +76,7 @@ fun SettingsCategoriesScreen(
                 )
             }
 
-            item {
+            item(key = "category_speech") {
                 SettingsCategoryRow(
                     icon = Icons.Default.Mic,
                     iconBg = Color(0xFF059669).copy(alpha = 0.2f),
@@ -87,7 +87,7 @@ fun SettingsCategoriesScreen(
                 )
             }
 
-            item {
+            item(key = "category_layout") {
                 SettingsCategoryRow(
                     icon = Icons.Default.DashboardCustomize,
                     iconBg = Color(0xFF7C3AED).copy(alpha = 0.2f),
@@ -98,7 +98,7 @@ fun SettingsCategoriesScreen(
                 )
             }
 
-            item {
+            item(key = "category_advanced") {
                 SettingsCategoryRow(
                     icon = Icons.Default.Tune,
                     iconBg = Color(0xFF8B5CF6).copy(alpha = 0.2f),

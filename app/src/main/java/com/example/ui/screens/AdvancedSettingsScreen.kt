@@ -61,6 +61,7 @@ fun AdvancedSettingsScreen(
     )
 
     Scaffold(
+        containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
@@ -89,12 +90,11 @@ fun AdvancedSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0C0D10))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Master Advanced Mode Toggle Card
-            item {
+            item(key = "advanced_master_toggle") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -155,7 +155,7 @@ fun AdvancedSettingsScreen(
             }
 
             // Expanded Advanced Controls
-            item {
+            item(key = "advanced_controls_section") {
                 AnimatedVisibility(
                     visible = isAdvancedEnabled,
                     enter = expandVertically() + fadeIn(),
@@ -357,7 +357,7 @@ fun AdvancedSettingsScreen(
 
             // Informational footer card if advanced is off
             if (!isAdvancedEnabled) {
-                item {
+                item(key = "advanced_info_footer") {
                     Surface(
                         shape = RoundedCornerShape(14.dp),
                         color = Color(0xFF161E30).copy(alpha = 0.6f),

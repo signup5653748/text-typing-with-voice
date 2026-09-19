@@ -35,11 +35,18 @@ fun SpeechSettingsScreen(
         viewModel.speechWrapper.getSupportedLanguages { 
             speechLanguages = it
         }
-        ttsEngines = viewModel.ttsWrapper.getAvailableEngines()
-        ttsLocales = viewModel.ttsWrapper.getAvailableVoicesOrLocales()
+        val engines = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            viewModel.ttsWrapper.getAvailableEngines()
+        }
+        val locales = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            viewModel.ttsWrapper.getAvailableVoicesOrLocales()
+        }
+        ttsEngines = engines
+        ttsLocales = locales
     }
 
     Scaffold(
+        containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
@@ -68,13 +75,12 @@ fun SpeechSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0C0D10))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Text-to-Speech Engine Picker Card
             if (ttsEngines.isNotEmpty()) {
-                item {
+                item(key = "tts_engines_card") {
                     Card(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                         shape = RoundedCornerShape(16.dp),
@@ -142,7 +148,7 @@ fun SpeechSettingsScreen(
             }
 
             // TTS Language / Voice Picker Card
-            item {
+            item(key = "tts_language_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -164,8 +170,14 @@ fun SpeechSettingsScreen(
                             fontSize = 12.5.sp
                         )
 
-                        val availableVoices = ttsLocales.ifEmpty {
-                            listOf(Locale.getDefault())
+                        val availableVoiceItems = remember(ttsLocales) {
+                            val list = ttsLocales.ifEmpty { listOf(Locale.getDefault()) }
+                            val defaultLoc = Locale.getDefault()
+                            list.distinctBy { it.language to it.country }.map { loc ->
+                                val tag = loc.toLanguageTag().ifBlank { "${loc.language}-${loc.country}".trimEnd('-') }
+                                val label = loc.getDisplayName(defaultLoc).ifBlank { loc.displayName }.replaceFirstChar { it.uppercase() }
+                                tag to label
+                            }
                         }
 
                         Row(
@@ -174,10 +186,8 @@ fun SpeechSettingsScreen(
                                 .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            availableVoices.distinctBy { it.language to it.country }.forEach { loc ->
-                                val tag = loc.toLanguageTag().ifBlank { "${loc.language}-${loc.country}".trimEnd('-') }
+                            availableVoiceItems.forEach { (tag, labelName) ->
                                 val isSelected = settings.ttsLanguage == tag || (settings.ttsLanguage.isEmpty() && tag.startsWith("en", ignoreCase = true))
-                                val labelName = loc.getDisplayName(Locale.getDefault()).ifBlank { loc.displayName }.replaceFirstChar { it.uppercase() }
 
                                 FilterChip(
                                     selected = isSelected,
@@ -197,7 +207,7 @@ fun SpeechSettingsScreen(
             }
 
             // Voice Typing Recognition Language Card
-            item {
+            item(key = "voice_typing_language_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),

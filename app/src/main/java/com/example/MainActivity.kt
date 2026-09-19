@@ -21,6 +21,7 @@ import com.example.ui.screens.EditorScreen
 import com.example.ui.screens.EditorViewModel
 import com.example.ui.screens.GeneralSettingsScreen
 import com.example.ui.screens.LayoutSettingsScreen
+import com.example.ui.screens.ReadingModeScreen
 import com.example.ui.screens.SettingsCategoriesScreen
 import com.example.ui.screens.SpeechSettingsScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -59,6 +60,13 @@ class MainActivity : ComponentActivity() {
                         composable("editor") {
                             EditorScreen(
                                 onNavigateToSettings = { navController.navigate("settings") },
+                                onNavigateToReadingMode = { navController.navigate("reading_mode") },
+                                viewModel = viewModel
+                            )
+                        }
+                        composable("reading_mode") {
+                            ReadingModeScreen(
+                                onNavigateBack = { navController.popBackStack() },
                                 viewModel = viewModel
                             )
                         }

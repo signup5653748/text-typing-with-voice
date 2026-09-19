@@ -49,6 +49,7 @@ fun LayoutSettingsScreen(
     )
 
     Scaffold(
+        containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
@@ -77,12 +78,11 @@ fun LayoutSettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFF0C0D10))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Button Size & Scaling Card
-            item {
+            item(key = "button_size_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
@@ -180,7 +180,7 @@ fun LayoutSettingsScreen(
             }
 
             // Custom Button Arrangement Card
-            item {
+            item(key = "button_arrangement_card") {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
                     shape = RoundedCornerShape(16.dp),
