@@ -33,17 +33,24 @@ object HeadingLogic {
      * and symbolCharLength is the total characters (including variation selectors) occupied by the symbols.
      */
     fun getHeadingLevelAndLength(line: CharSequence): Pair<Int, Int> {
-        var level = 0
-        var index = 0
-        val length = line.length
+        return getHeadingLevelAndLength(line, 0, line.length)
+    }
 
-        while (index < length && level < 15) {
-            val c = line[index]
+    /**
+     * Overload that checks heading level and character length directly on a region of a CharSequence,
+     * avoiding intermediate String allocations.
+     */
+    fun getHeadingLevelAndLength(text: CharSequence, start: Int, end: Int): Pair<Int, Int> {
+        var level = 0
+        var index = start
+
+        while (index < end && level < 15) {
+            val c = text[index]
             if (isHeadingSquareChar(c)) {
                 level++
                 index++
                 // Skip optional variation selector \uFE0F
-                if (index < length && line[index] == VARIATION_SELECTOR_16) {
+                if (index < end && text[index] == VARIATION_SELECTOR_16) {
                     index++
                 }
             } else {
@@ -51,7 +58,7 @@ object HeadingLogic {
             }
         }
 
-        return if (level > 0) Pair(level, index) else Pair(0, 0)
+        return if (level > 0) Pair(level, index - start) else Pair(0, 0)
     }
 
     /**

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_bg"
+    android:padding="14dp">
+
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="VoiceType Reading Mode"
+            android:textColor="#56D0DE"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="HOME WIDGET"
+            android:textColor="#8FA7D8"
+            android:textSize="10sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Document Title -->
+    <TextView
+        android:id="@+id/widget_doc_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="Active Document"
+        android:textColor="#ECEEF2"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- Preview Snippet -->
+    <TextView
+        android:id="@+id/widget_preview_text"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp"
+        android:text="Tap Visit Reading Screen to open reader or Listen to start speech playback."
+        android:textColor="#94A3B8"
+        android:textSize="12sp"
+        android:maxLines="3"
+        android:ellipsize="end" />
+
+    <!-- Action Buttons Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_btn_visit"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/widget_btn_bg"
+            android:gravity="center"
+            android:text="Visit Screen"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_btn_read"
+            android:layout_width="0dp"
+            android:layout_height="38dp"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:background="@drawable/widget_btn_read_bg"
+            android:gravity="center"
+            android:text="▶ Listen"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

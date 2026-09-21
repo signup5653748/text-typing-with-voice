@@ -12,6 +12,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.navigation.NavController
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -41,14 +47,29 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
                     val viewModel: EditorViewModel = viewModel()
-                    
-                    LaunchedEffect(Unit) {
-                        processIntent(intent, viewModel)
+                    val settings by viewModel.settings.collectAsState()
+                    var initialNavHandled by remember { mutableStateOf(false) }
+
+                    LaunchedEffect(settings.startOnReadingScreen) {
+                        processIntent(intent, viewModel, navController)
+                        if (!initialNavHandled) {
+                            val openReadingMode = intent?.getBooleanExtra("open_reading_mode", false) ?: false
+                            if (openReadingMode || settings.startOnReadingScreen) {
+                                navController.navigate("reading_mode") {
+                                    launchSingleTop = true
+                                }
+                            }
+                            val startReading = intent?.getBooleanExtra("start_reading", false) ?: false
+                            if (startReading) {
+                                viewModel.playReadingModeFromTop()
+                            }
+                            initialNavHandled = true
+                        }
                     }
-                    
+
                     DisposableEffect(Unit) {
                         val listener = androidx.core.util.Consumer<Intent> { newIntent ->
-                            processIntent(newIntent, viewModel)
+                            processIntent(newIntent, viewModel, navController)
                         }
                         addOnNewIntentListener(listener)
                         onDispose {
@@ -111,7 +132,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
-    private fun processIntent(intent: Intent?, viewModel: EditorViewModel) {
+    private fun processIntent(intent: Intent?, viewModel: EditorViewModel, navController: NavController? = null) {
         if (intent == null) return
         val action = intent.action
         if (action == Intent.ACTION_VIEW || action == Intent.ACTION_EDIT) {
@@ -120,6 +141,14 @@ class MainActivity : ComponentActivity() {
                 handledUri = uri
                 viewModel.loadFromUri(uri, isFromExternalOrExplicitOpen = true)
             }
+        }
+        if (intent.getBooleanExtra("open_reading_mode", false)) {
+            navController?.navigate("reading_mode") {
+                launchSingleTop = true
+            }
+        }
+        if (intent.getBooleanExtra("start_reading", false)) {
+            viewModel.playReadingModeFromTop()
         }
     }
 }

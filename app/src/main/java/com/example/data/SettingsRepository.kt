@@ -34,7 +34,7 @@ data class SettingsEntity(
     val id: Int = 1,
     // Theme & General
     val themeName: String = "Dark",
-    val highlightColorHex: Long = 0xFFFFD600,
+    val highlightColorHex: Long = 0xFF38BDF8,
     val backgroundColorHex: Long = 0xFF000000,
     val textColorHex: Long = 0xFFECEEF2,
     val textSizeSp: Float = 18.0f,
@@ -57,7 +57,9 @@ data class SettingsEntity(
     val disabledSpeechFeedbackButtons: String = "", // comma-separated button action names
     val hapticFeedbackEnabled: Boolean = true,
     // Starred Folders
-    val starredFoldersJson: String = ""
+    val starredFoldersJson: String = "",
+    // Launch & Default Visit Screen
+    val startOnReadingScreen: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
@@ -81,6 +83,7 @@ class SettingsRepository(private val context: Context) {
     private val ADVANCED_SETTINGS_ENABLED = booleanPreferencesKey("advancedSettingsEnabled")
     private val DISABLED_SPEECH_FEEDBACK_BUTTONS = stringPreferencesKey("disabledSpeechFeedbackButtons")
     private val HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("hapticFeedbackEnabled")
+    private val START_ON_READING_SCREEN = booleanPreferencesKey("startOnReadingScreen")
     private val STARRED_FOLDERS = stringPreferencesKey("starredFolders")
     private val LAST_SESSION_TEXT = stringPreferencesKey("lastSessionText")
     private val LAST_SESSION_FILE_NAME = stringPreferencesKey("lastSessionFileName")
@@ -134,9 +137,11 @@ class SettingsRepository(private val context: Context) {
     }
 
     val settingsFlow: Flow<SettingsEntity> = context.dataStore.data.map { prefs ->
+        val storedHighlight = prefs[HIGHLIGHT_COLOR]
+        val activeHighlight = if (storedHighlight == null || storedHighlight == 0xFFFFD600L) 0xFF38BDF8L else storedHighlight
         SettingsEntity(
             themeName = prefs[THEME_NAME] ?: "Dark",
-            highlightColorHex = prefs[HIGHLIGHT_COLOR] ?: 0xFFFFD600,
+            highlightColorHex = activeHighlight,
             backgroundColorHex = prefs[BACKGROUND_COLOR] ?: 0xFF000000,
             textColorHex = prefs[TEXT_COLOR] ?: 0xFFECEEF2,
             textSizeSp = prefs[TEXT_SIZE] ?: 18.0f,
@@ -155,7 +160,8 @@ class SettingsRepository(private val context: Context) {
             advancedSettingsEnabled = prefs[ADVANCED_SETTINGS_ENABLED] ?: false,
             disabledSpeechFeedbackButtons = prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "",
             hapticFeedbackEnabled = prefs[HAPTIC_FEEDBACK_ENABLED] ?: true,
-            starredFoldersJson = prefs[STARRED_FOLDERS] ?: ""
+            starredFoldersJson = prefs[STARRED_FOLDERS] ?: "",
+            startOnReadingScreen = prefs[START_ON_READING_SCREEN] ?: false
         )
     }
 
@@ -471,6 +477,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateHapticFeedbackEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[HAPTIC_FEEDBACK_ENABLED] = enabled
+        }
+    }
+
+    suspend fun updateStartOnReadingScreen(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[START_ON_READING_SCREEN] = enabled
         }
     }
 }

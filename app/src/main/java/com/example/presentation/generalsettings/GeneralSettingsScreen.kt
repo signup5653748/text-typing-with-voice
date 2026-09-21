@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -20,12 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.core.designsystem.COLOR_OPTIONS
 import com.example.core.designsystem.PRESET_THEMES
+import com.example.widget.ReadingModeWidgetProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,6 +38,7 @@ fun GeneralSettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val settings = uiState.settings
+    val context = LocalContext.current
 
     Scaffold(
         containerColor = Color(0xFF0C0D10),
@@ -107,7 +111,10 @@ fun GeneralSettingsScreen(
                     hideHeadingSymbols = settings.hideHeadingSymbols,
                     onHideHeadingsChanged = { viewModel.updateHideHeadingSymbols(it) },
                     alwaysInsertMicDirectly = settings.alwaysInsertMicDirectly,
-                    onAlwaysInsertMicChanged = { viewModel.updateAlwaysInsertMicDirectly(it) }
+                    onAlwaysInsertMicChanged = { viewModel.updateAlwaysInsertMicDirectly(it) },
+                    startOnReadingScreen = settings.startOnReadingScreen,
+                    onStartOnReadingScreenChanged = { viewModel.updateStartOnReadingScreen(it) },
+                    onAddWidgetClicked = { ReadingModeWidgetProvider.requestPinWidget(context) }
                 )
             }
         }
@@ -189,7 +196,10 @@ private fun SettingsTogglesCard(
     hideHeadingSymbols: Boolean,
     onHideHeadingsChanged: (Boolean) -> Unit,
     alwaysInsertMicDirectly: Boolean,
-    onAlwaysInsertMicChanged: (Boolean) -> Unit
+    onAlwaysInsertMicChanged: (Boolean) -> Unit,
+    startOnReadingScreen: Boolean,
+    onStartOnReadingScreenChanged: (Boolean) -> Unit,
+    onAddWidgetClicked: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
@@ -211,6 +221,34 @@ private fun SettingsTogglesCard(
                     Text("Insert speech directly at caret instead of opening replace popup.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA7D8))
                 }
                 Switch(checked = alwaysInsertMicDirectly, onCheckedChange = onAlwaysInsertMicChanged)
+            }
+            HorizontalDivider(color = Color(0xFF243048))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Start on Reading Screen", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
+                    Text("Automatically visit Reading Screen when launching or visiting home.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA7D8))
+                }
+                Switch(checked = startOnReadingScreen, onCheckedChange = onStartOnReadingScreenChanged)
+            }
+            HorizontalDivider(color = Color(0xFF243048))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text("Home Screen Reading Widget", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
+                    Text("Add a quick visit and read widget to your phone's home screen.", style = MaterialTheme.typography.bodySmall, color = Color(0xFF8FA7D8))
+                }
+                Button(
+                    onClick = onAddWidgetClicked,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Widgets, contentDescription = "Add Widget", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Add")
+                }
             }
         }
     }

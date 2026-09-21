@@ -66,4 +66,10 @@ class GeneralSettingsViewModel(
             settingsRepo.updateAlwaysInsertMicDirectly(always)
         }
     }
+
+    fun updateStartOnReadingScreen(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepo.updateStartOnReadingScreen(enabled)
+        }
+    }
 }

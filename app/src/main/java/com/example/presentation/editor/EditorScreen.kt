@@ -46,6 +46,7 @@ import com.example.ui.screens.MoreControlsSheet
 import com.example.ui.screens.ReplacePopup
 import com.example.ui.screens.SaveFileDialog
 import com.example.ui.screens.SessionResumeDialog
+import com.example.widget.ReadingModeWidgetProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -165,7 +166,10 @@ fun EditorScreen(
                 onSaveCurrentFile = { viewModel.saveCurrentFile() },
                 onOpenSaveAsDialog = { viewModel.openSaveDialog(isSaveAs = true) },
                 onOpenJumpTo = { viewModel.openJumpTo() },
-                onNavigateToSettings = onNavigateToSettings
+                onNavigateToSettings = onNavigateToSettings,
+                startOnReadingScreen = settings.startOnReadingScreen,
+                onToggleStartOnReadingScreen = { viewModel.updateStartOnReadingScreen(it) },
+                onAddReadingWidget = { ReadingModeWidgetProvider.requestPinWidget(context) }
             )
         }
     ) { padding ->

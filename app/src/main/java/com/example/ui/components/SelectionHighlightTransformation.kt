@@ -16,8 +16,8 @@ class SelectionHighlightTransformation(
     private val selection: TextRange,
     private val transientHighlight: TextRange? = null,
     private val speechHighlight: TextRange? = null,
-    private val highlightColor: Color = Color(0xFFFFD600).copy(alpha = 0.55f),
-    private val speechHighlightColor: Color = Color(0xFFFFD600),
+    private val highlightColor: Color = Color(0xFF38BDF8).copy(alpha = 0.45f),
+    private val speechHighlightColor: Color = Color(0xFF38BDF8),
     private val highlightedTextColor: Color = Color.White,
     private val hideHeadingSymbols: Boolean = true,
     private val cachedMapping: CachedOffsetMap? = null
@@ -160,76 +160,103 @@ class SelectionHighlightTransformation(
     }
 
     companion object {
+        @Volatile
+        private var lastComputedMap: Pair<String, CachedOffsetMap>? = null
+
         fun computeOffsetMap(origText: String): CachedOffsetMap {
+            val cached = lastComputedMap
+            if (cached != null && cached.first == origText) {
+                return cached.second
+            }
+
             val origLen = origText.length
+            if (origLen == 0) {
+                val emptyMap = CachedOffsetMap(IntArray(1), IntArray(1), "")
+                lastComputedMap = Pair("", emptyMap)
+                return emptyMap
+            }
+
             val origToTrans = IntArray(origLen + 1)
-            val transToOrigList = mutableListOf<Int>()
-            val transBuilder = StringBuilder()
+            val transToOrig = IntArray(origLen + 1)
+            val transBuilder = StringBuilder(origLen)
 
             var origIdx = 0
-            while (origIdx < origLen) {
-                val lineEndIdx = origText.indexOf('\n', startIndex = origIdx).let { if (it >= 0) it else origLen }
-                val lineLength = lineEndIdx - origIdx
-                val lineContent = origText.substring(origIdx, lineEndIdx)
-                val (_, symbolLen) = HeadingLogic.getHeadingLevelAndLength(lineContent)
+            var transIdx = 0
 
-                for (i in 0 until min(symbolLen, lineLength)) {
-                    origToTrans[origIdx + i] = transBuilder.length
+            while (origIdx < origLen) {
+                var lineEndIdx = origText.indexOf('\n', startIndex = origIdx)
+                if (lineEndIdx < 0) lineEndIdx = origLen
+
+                val lineLength = lineEndIdx - origIdx
+                val (_, symbolLen) = HeadingLogic.getHeadingLevelAndLength(origText, origIdx, lineEndIdx)
+                val safeSymbolLen = min(symbolLen, lineLength)
+
+                for (i in 0 until safeSymbolLen) {
+                    origToTrans[origIdx + i] = transIdx
                 }
 
-                for (i in symbolLen until lineLength) {
+                for (i in safeSymbolLen until lineLength) {
                     val currentOrig = origIdx + i
-                    origToTrans[currentOrig] = transBuilder.length
-                    transToOrigList.add(currentOrig)
+                    origToTrans[currentOrig] = transIdx
+                    transToOrig[transIdx] = currentOrig
                     transBuilder.append(origText[currentOrig])
+                    transIdx++
                 }
 
                 if (lineEndIdx < origLen) {
-                    origToTrans[lineEndIdx] = transBuilder.length
-                    transToOrigList.add(lineEndIdx)
+                    origToTrans[lineEndIdx] = transIdx
+                    transToOrig[transIdx] = lineEndIdx
                     transBuilder.append('\n')
+                    transIdx++
                     origIdx = lineEndIdx + 1
                 } else {
                     origIdx = lineEndIdx
                 }
             }
 
-            origToTrans[origLen] = transBuilder.length
-            transToOrigList.add(origLen)
-            return CachedOffsetMap(
+            origToTrans[origLen] = transIdx
+            transToOrig[transIdx] = origLen
+            transIdx++
+
+            val finalTransToOrig = if (transIdx == transToOrig.size) transToOrig else transToOrig.copyOf(transIdx)
+
+            val computed = CachedOffsetMap(
                 origToTrans = origToTrans,
-                transToOrig = transToOrigList.toIntArray(),
+                transToOrig = finalTransToOrig,
                 transformedTextStr = transBuilder.toString()
             )
+            lastComputedMap = Pair(origText, computed)
+            return computed
+        }
+
+        fun originalToTransformed(origOffset: Int, mapping: CachedOffsetMap?): Int {
+            if (mapping == null) return origOffset
+            if (mapping.origToTrans.isEmpty()) return 0
+            val clamped = origOffset.coerceIn(0, mapping.origToTrans.lastIndex)
+            return mapping.origToTrans[clamped].coerceIn(0, mapping.transformedTextStr.length)
+        }
+
+        fun transformedToOriginal(transOffset: Int, mapping: CachedOffsetMap?): Int {
+            if (mapping == null) return transOffset
+            if (mapping.transToOrig.isEmpty()) return 0
+            val clamped = transOffset.coerceIn(0, mapping.transToOrig.lastIndex)
+            return mapping.transToOrig[clamped]
+        }
+
+        fun originalToTransformed(origText: String, origOffset: Int, hideHeadingSymbols: Boolean): Int {
+            if (!hideHeadingSymbols || origText.isEmpty()) {
+                return origOffset.coerceIn(0, origText.length)
+            }
+            val mapping = computeOffsetMap(origText)
+            return originalToTransformed(origOffset, mapping)
         }
 
         fun transformedToOriginal(origText: String, transOffset: Int, hideHeadingSymbols: Boolean): Int {
             if (!hideHeadingSymbols || origText.isEmpty()) {
                 return transOffset.coerceIn(0, origText.length)
             }
-            val origLen = origText.length
-            val transToOrigList = mutableListOf<Int>()
-            var origIdx = 0
-            while (origIdx < origLen) {
-                val lineEndIdx = origText.indexOf('\n', startIndex = origIdx).let { if (it >= 0) it else origLen }
-                val lineLength = lineEndIdx - origIdx
-                val lineContent = origText.substring(origIdx, lineEndIdx)
-                val (_, symbolLen) = HeadingLogic.getHeadingLevelAndLength(lineContent)
-
-                for (i in symbolLen until lineLength) {
-                    transToOrigList.add(origIdx + i)
-                }
-                if (lineEndIdx < origLen) {
-                    transToOrigList.add(lineEndIdx)
-                    origIdx = lineEndIdx + 1
-                } else {
-                    origIdx = lineEndIdx
-                }
-            }
-            transToOrigList.add(origLen)
-            if (transToOrigList.isEmpty()) return 0
-            val clamped = transOffset.coerceIn(0, transToOrigList.lastIndex)
-            return transToOrigList[clamped].coerceIn(0, origLen)
+            val mapping = computeOffsetMap(origText)
+            return transformedToOriginal(transOffset, mapping)
         }
     }
 }

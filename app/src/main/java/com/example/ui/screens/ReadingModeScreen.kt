@@ -5,12 +5,14 @@ import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,20 +39,28 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardReturn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Segment
+import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Spellcheck
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
+import com.example.ui.components.SelectionDragHandles
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,6 +68,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
@@ -84,6 +95,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
@@ -112,6 +124,74 @@ private val InvisibleSelectionColors = TextSelectionColors(
     backgroundColor = Color.Transparent
 )
 
+enum class ReadingFunction(
+    val id: String,
+    val title: String,
+    val shortLabel: String,
+    val description: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    PARAGRAPH(
+        id = "paragraph",
+        title = "Paragraph Read",
+        shortLabel = "Paragraph",
+        description = "Tap any paragraph to read it aloud",
+        icon = Icons.Default.Segment
+    ),
+    READ_FROM_TOP(
+        id = "from_top",
+        title = "Read from Top",
+        shortLabel = "From Top",
+        description = "Start reading whole text from beginning",
+        icon = Icons.Default.VolumeUp
+    ),
+    PLAY_FROM_CURSOR(
+        id = "from_cursor",
+        title = "Play from Cursor",
+        shortLabel = "From Cursor",
+        description = "Start reading from current cursor position",
+        icon = Icons.Default.PlayArrow
+    ),
+    SENTENCE_READ(
+        id = "sentence",
+        title = "Sentence Read",
+        shortLabel = "Sentence",
+        description = "Read the current sentence aloud",
+        icon = Icons.Default.FormatQuote
+    ),
+    CHARACTER_READ(
+        id = "character",
+        title = "Character Read",
+        shortLabel = "Char Read",
+        description = "Read character-by-character from cursor",
+        icon = Icons.Default.Spellcheck
+    )
+}
+
+fun findSentenceRange(text: String, offset: Int): TextRange {
+    if (text.isEmpty()) return TextRange(0, 0)
+    val clamped = offset.coerceIn(0, text.length)
+    val delimiters = charArrayOf('.', '!', '?', '\n')
+    var start = 0
+    for (i in (clamped - 1) downTo 0) {
+        if (text[i] in delimiters) {
+            start = i + 1
+            while (start < text.length && text[start].isWhitespace()) start++
+            break
+        }
+    }
+    var end = text.length
+    for (i in clamped until text.length) {
+        if (text[i] in delimiters) {
+            end = i + 1
+            break
+        }
+    }
+    val s = start.coerceIn(0, text.length)
+    val e = end.coerceIn(s, text.length)
+    return TextRange(s, e)
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReadingModeScreen(
@@ -135,20 +215,29 @@ fun ReadingModeScreen(
     }
 
     var isParagraphModeActive by remember { mutableStateOf(false) }
+    var selectedFunction by remember { mutableStateOf(ReadingFunction.PARAGRAPH) }
+    var showFunctionPickerDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
-    var editSubMenuExpanded by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
 
     // Long press custom popup state
     var showContextMenu by remember { mutableStateOf(false) }
+    var showColorPickerInMenu by remember { mutableStateOf(false) }
     var contextMenuTouchOffset by remember { mutableStateOf(Offset.Zero) }
     var contextMenuSelectedRange by remember { mutableStateOf<TextRange?>(null) }
+
+    // Standalone reading selection state completely decoupled from Home (Editor) screen selection
+    var readingSelection by remember { mutableStateOf(TextRange.Zero) }
 
     var localLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
     val scrollState = rememberScrollState()
 
     val highlightColor = remember(settings.highlightColorHex) {
         Color(settings.highlightColorHex)
+    }
+
+    val isLightHighlight = remember(highlightColor) {
+        (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
     }
 
     val cachedOffsetMap = remember(textValue.text, settings.hideHeadingSymbols) {
@@ -160,18 +249,19 @@ fun ReadingModeScreen(
     }
 
     val visualTransformation = remember(
-        textValue.selection,
+        readingSelection,
         speechHighlightRange,
         highlightColor,
+        isLightHighlight,
         settings.hideHeadingSymbols,
         cachedOffsetMap
     ) {
         SelectionHighlightTransformation(
-            selection = textValue.selection,
+            selection = readingSelection,
             speechHighlight = speechHighlightRange,
-            highlightColor = highlightColor,
-            speechHighlightColor = highlightColor, // Consistent bright yellow
-            highlightedTextColor = Color(0xFF090D16),
+            highlightColor = highlightColor.copy(alpha = 0.45f),
+            speechHighlightColor = highlightColor,
+            highlightedTextColor = if (isLightHighlight) Color(0xFF090D16) else Color.White,
             hideHeadingSymbols = settings.hideHeadingSymbols,
             cachedMapping = cachedOffsetMap
         )
@@ -208,6 +298,37 @@ fun ReadingModeScreen(
                     }
                 },
                 actions = {
+                    // Standalone Edit Button for instant, one-tap access
+                    FilledTonalButton(
+                        onClick = {
+                            viewModel.stopPlayback()
+                            onNavigateBack()
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = Color(0xFF1E283E),
+                            contentColor = Color(0xFF56D0DE)
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .height(36.dp)
+                            .testTag("reading_mode_standalone_edit_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Document",
+                            tint = Color(0xFF56D0DE),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Edit",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFECEEF2)
+                        )
+                    }
+
                     // Text size button
                     Box {
                         IconButton(
@@ -341,87 +462,67 @@ fun ReadingModeScreen(
                             expanded = menuExpanded,
                             onDismissRequest = {
                                 menuExpanded = false
-                                editSubMenuExpanded = false
                             },
                             modifier = Modifier.background(Color(0xFF161E30))
                         ) {
-                            // Play from cursor
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        "Play from cursor",
-                                        fontWeight = FontWeight.SemiBold,
+                                        "Undo",
+                                        color = if (canUndo) Color(0xFFECEEF2) else Color(0xFF4A5568)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Undo,
+                                        contentDescription = "Undo",
+                                        tint = if (canUndo) Color(0xFF56D0DE) else Color(0xFF4A5568)
+                                    )
+                                },
+                                enabled = canUndo,
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.undo()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Redo",
+                                        color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF4A5568)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Redo,
+                                        contentDescription = "Redo",
+                                        tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568)
+                                    )
+                                },
+                                enabled = canRedo,
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.redo()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Add new line",
                                         color = Color(0xFFECEEF2)
                                     )
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = "Play from cursor",
+                                        imageVector = Icons.Default.KeyboardReturn,
+                                        contentDescription = "Add new line",
                                         tint = Color(0xFF32D796)
                                     )
                                 },
                                 onClick = {
-                                    menuExpanded = false
-                                    viewModel.togglePlay()
-                                }
-                            )
-
-                            // Play from beginning
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Play from beginning",
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.VolumeUp,
-                                        contentDescription = "Play from beginning",
-                                        tint = Color(0xFF56D0DE)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.playReadingModeFromTop()
-                                }
-                            )
-
-                            // Paragraph mode toggle
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        if (isParagraphModeActive) "Paragraph Mode: ON" else "Paragraph Mode: OFF",
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Segment,
-                                        contentDescription = "Paragraph Mode Toggle",
-                                        tint = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFF8FA7D8)
-                                    )
-                                },
-                                trailingIcon = {
-                                    if (isParagraphModeActive) {
-                                        Icon(
-                                            imageVector = Icons.Default.Check,
-                                            contentDescription = "Active",
-                                            tint = Color(0xFF56D0DE),
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    isParagraphModeActive = !isParagraphModeActive
-                                    if (isParagraphModeActive) {
-                                        viewModel.ttsWrapper.speakFeedback("Paragraph mode active. Tap any paragraph to read.")
-                                    } else {
-                                        viewModel.ttsWrapper.speakFeedback("Paragraph mode off")
-                                    }
+                                    viewModel.addNewLine()
                                     menuExpanded = false
                                 }
                             )
@@ -431,94 +532,24 @@ fun ReadingModeScreen(
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        "Edit",
-                                        fontWeight = FontWeight.SemiBold,
+                                        "Select all",
                                         color = Color(0xFFECEEF2)
                                     )
                                 },
                                 leadingIcon = {
                                     Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = "Edit Options",
+                                        imageVector = Icons.Default.SelectAll,
+                                        contentDescription = "Select all",
                                         tint = Color(0xFF56D0DE)
                                     )
                                 },
-                                trailingIcon = {
-                                    Icon(
-                                        imageVector = if (editSubMenuExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        tint = Color(0xFF8FA7D8)
-                                    )
-                                },
                                 onClick = {
-                                    editSubMenuExpanded = !editSubMenuExpanded
+                                    menuExpanded = false
+                                    val allRange = TextRange(0, textValue.text.length)
+                                    readingSelection = allRange
+                                    contextMenuSelectedRange = allRange
                                 }
                             )
-
-                            if (editSubMenuExpanded) {
-                                HorizontalDivider(color = Color(0xFF26344E))
-
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Undo",
-                                            color = if (canUndo) Color(0xFFECEEF2) else Color(0xFF4A5568)
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.Undo,
-                                            contentDescription = "Undo",
-                                            tint = if (canUndo) Color(0xFF56D0DE) else Color(0xFF4A5568)
-                                        )
-                                    },
-                                    enabled = canUndo,
-                                    onClick = {
-                                        viewModel.undo()
-                                    }
-                                )
-
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Redo",
-                                            color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF4A5568)
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.Redo,
-                                            contentDescription = "Redo",
-                                            tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568)
-                                        )
-                                    },
-                                    enabled = canRedo,
-                                    onClick = {
-                                        viewModel.redo()
-                                    }
-                                )
-
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            "Add new line",
-                                            color = Color(0xFFECEEF2)
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.KeyboardReturn,
-                                            contentDescription = "Add new line",
-                                            tint = Color(0xFF32D796)
-                                        )
-                                    },
-                                    onClick = {
-                                        viewModel.addNewLine()
-                                        menuExpanded = false
-                                        editSubMenuExpanded = false
-                                    }
-                                )
-                            }
                         }
                     }
                 },
@@ -540,12 +571,16 @@ fun ReadingModeScreen(
                     .verticalScroll(scrollState)
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
+                val readingTextFieldValue = remember(textValue.text, readingSelection) {
+                    TextFieldValue(text = textValue.text, selection = readingSelection)
+                }
+
                 CompositionLocalProvider(
                     LocalTextSelectionColors provides InvisibleSelectionColors,
                     LocalTextToolbar provides ReadingEmptyTextToolbar
                 ) {
                     BasicTextField(
-                        value = textValue,
+                        value = readingTextFieldValue,
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier
@@ -569,28 +604,57 @@ fun ReadingModeScreen(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .pointerInput(isParagraphModeActive, textValue.text, settings.hideHeadingSymbols) {
+                        .pointerInput(isParagraphModeActive, textValue.text, settings.hideHeadingSymbols, cachedOffsetMap, readingSelection) {
                             detectTapGestures(
                                 onTap = { tapOffset ->
+                                    // If selection is active, check if tap was near handles so we NEVER clear selection
+                                    if (readingSelection.length > 0 && localLayoutResult != null) {
+                                        val layout = localLayoutResult!!
+                                        try {
+                                            val tLen = layout.layoutInput.text.length
+                                            val tStart = if (settings.hideHeadingSymbols && cachedOffsetMap != null) {
+                                                SelectionHighlightTransformation.originalToTransformed(readingSelection.min, cachedOffsetMap)
+                                            } else {
+                                                SelectionHighlightTransformation.originalToTransformed(textValue.text, readingSelection.min, settings.hideHeadingSymbols)
+                                            }.coerceIn(0, tLen)
+                                            val tEnd = if (settings.hideHeadingSymbols && cachedOffsetMap != null) {
+                                                SelectionHighlightTransformation.originalToTransformed(readingSelection.max, cachedOffsetMap)
+                                            } else {
+                                                SelectionHighlightTransformation.originalToTransformed(textValue.text, readingSelection.max, settings.hideHeadingSymbols)
+                                            }.coerceIn(0, tLen)
+
+                                            val sRect = layout.getCursorRect(tStart)
+                                            val eRect = layout.getCursorRect(tEnd)
+                                            val knobRadius = 12.dp.toPx()
+                                            val hitDist = 56.dp.toPx()
+
+                                            val distS = (tapOffset - Offset(sRect.left, sRect.bottom + knobRadius)).getDistance()
+                                            val distE = (tapOffset - Offset(eRect.right, eRect.bottom + knobRadius)).getDistance()
+                                            if (distS <= hitDist || distE <= hitDist) {
+                                                // Tapped on or near handle, do nothing to preserve selection
+                                                return@detectTapGestures
+                                            }
+                                        } catch (_: Exception) {}
+                                    }
+
                                     if (showContextMenu) {
                                         showContextMenu = false
-                                        viewModel.clearSelection()
-                                        return@detectTapGestures
+                                        showColorPickerInMenu = false
                                     }
 
                                     localLayoutResult?.let { layout ->
                                         val transOffset = layout.getOffsetForPosition(tapOffset)
                                         val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                            textValue.text,
                                             transOffset,
-                                            settings.hideHeadingSymbols
+                                            cachedOffsetMap
                                         )
 
                                         if (isParagraphModeActive) {
                                             val paraRange = findParagraphRange(textValue.text, origOffset)
                                             viewModel.playFrom(paraRange.start, paraRange.end)
                                         } else {
-                                            viewModel.setCaretFromTap(origOffset)
+                                            // Decoupled cursor position in Reading Mode - does not change Home Screen selection
+                                            readingSelection = TextRange(origOffset, origOffset)
                                         }
                                     }
                                 },
@@ -598,9 +662,8 @@ fun ReadingModeScreen(
                                     localLayoutResult?.let { layout ->
                                         val transOffset = layout.getOffsetForPosition(longPressOffset)
                                         val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                            textValue.text,
                                             transOffset,
-                                            settings.hideHeadingSymbols
+                                            cachedOffsetMap
                                         )
 
                                         val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset).let {
@@ -612,7 +675,8 @@ fun ReadingModeScreen(
                                         }
 
                                         if (wordRange.length > 0) {
-                                            viewModel.setSelectionRange(wordRange)
+                                            // Standalone selection in Reading Mode
+                                            readingSelection = wordRange
                                             contextMenuTouchOffset = longPressOffset
                                             contextMenuSelectedRange = wordRange
                                             showContextMenu = true
@@ -622,6 +686,34 @@ fun ReadingModeScreen(
                             )
                         }
                 )
+
+                // Selection Drag Handles for adjusting text selection
+                if (readingSelection.length > 0) {
+                    SelectionDragHandles(
+                        text = textValue.text,
+                        selection = readingSelection,
+                        layoutResult = localLayoutResult,
+                        hideHeadingSymbols = settings.hideHeadingSymbols,
+                        highlightColor = highlightColor,
+                        cachedMapping = cachedOffsetMap,
+                        modifier = Modifier.matchParentSize(),
+                        onSelectionChange = { newRange ->
+                            readingSelection = newRange
+                            contextMenuSelectedRange = newRange
+                            localLayoutResult?.let { layout ->
+                                try {
+                                    val transEnd = if (settings.hideHeadingSymbols && cachedOffsetMap != null) {
+                                        SelectionHighlightTransformation.originalToTransformed(newRange.max, cachedOffsetMap)
+                                    } else {
+                                        SelectionHighlightTransformation.originalToTransformed(textValue.text, newRange.max, settings.hideHeadingSymbols)
+                                    }.coerceIn(0, layout.layoutInput.text.length)
+                                    val rect = layout.getCursorRect(transEnd)
+                                    contextMenuTouchOffset = Offset(rect.right, rect.top)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    )
+                }
             }
 
             // Custom Long-Press Context Menu Popup
@@ -636,9 +728,12 @@ fun ReadingModeScreen(
                     },
                     onDismissRequest = {
                         showContextMenu = false
-                        viewModel.clearSelection()
+                        showColorPickerInMenu = false
                     },
-                    properties = PopupProperties(focusable = true)
+                    properties = PopupProperties(
+                        focusable = false,
+                        dismissOnClickOutside = false
+                    )
                 ) {
                     Surface(
                         shape = RoundedCornerShape(18.dp),
@@ -649,174 +744,445 @@ fun ReadingModeScreen(
                             .padding(horizontal = 16.dp)
                             .testTag("reading_mode_context_menu")
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            // Copy
-                            ContextMenuItem(
-                                icon = Icons.Default.ContentCopy,
-                                label = "Copy",
-                                tint = Color(0xFF56D0DE),
-                                onClick = {
-                                    val range = contextMenuSelectedRange
-                                    if (range != null && range.length > 0) {
-                                        val subText = textValue.text.substring(range.min, range.max)
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        val clip = ClipData.newPlainText("text", subText)
-                                        clipboard.setPrimaryClip(clip)
-                                        viewModel.ttsWrapper.speakFeedback("Copied")
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                // Copy
+                                ContextMenuItem(
+                                    icon = Icons.Default.ContentCopy,
+                                    label = "Copy",
+                                    tint = Color(0xFF56D0DE),
+                                    onClick = {
+                                        val range = contextMenuSelectedRange
+                                        if (range != null && range.length > 0) {
+                                            val subText = textValue.text.substring(range.min, range.max)
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            val clip = ClipData.newPlainText("text", subText)
+                                            clipboard.setPrimaryClip(clip)
+                                            viewModel.ttsWrapper.speakFeedback("Copied")
+                                        }
+                                        showContextMenu = false
+                                        showColorPickerInMenu = false
+                                        readingSelection = TextRange.Zero
                                     }
-                                    showContextMenu = false
-                                    viewModel.clearSelection()
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(28.dp)
+                                )
+
+                                // Read
+                                ContextMenuItem(
+                                    icon = Icons.Default.VolumeUp,
+                                    label = "Read",
+                                    tint = Color(0xFF32D796),
+                                    onClick = {
+                                        val start = contextMenuSelectedRange?.min ?: 0
+                                        val end = contextMenuSelectedRange?.max
+                                        showContextMenu = false
+                                        showColorPickerInMenu = false
+                                        viewModel.playFrom(start, end)
+                                    }
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(28.dp)
+                                )
+
+                                // Select All
+                                ContextMenuItem(
+                                    icon = Icons.Default.SelectAll,
+                                    label = "All",
+                                    tint = Color(0xFFA855F7),
+                                    onClick = {
+                                        val allRange = TextRange(0, textValue.text.length)
+                                        readingSelection = allRange
+                                        contextMenuSelectedRange = allRange
+                                    }
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(28.dp)
+                                )
+
+                                // Edit (Voice & Text Replace)
+                                ContextMenuItem(
+                                    icon = Icons.Default.Mic,
+                                    label = "Edit",
+                                    tint = Color(0xFF38BDF8),
+                                    onClick = {
+                                        showContextMenu = false
+                                        showColorPickerInMenu = false
+                                        viewModel.openVoiceReplacePopup()
+                                    }
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(28.dp)
+                                )
+
+                                // Color Picker
+                                ContextMenuItem(
+                                    icon = Icons.Default.Palette,
+                                    label = "Color",
+                                    tint = highlightColor,
+                                    onClick = {
+                                        showColorPickerInMenu = !showColorPickerInMenu
+                                    }
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(28.dp)
+                                )
+
+                                // Delete
+                                ContextMenuItem(
+                                    icon = Icons.Default.DeleteOutline,
+                                    label = "Delete",
+                                    tint = Color(0xFFFF6584),
+                                    onClick = {
+                                        val range = contextMenuSelectedRange
+                                        if (range != null && range.length > 0) {
+                                            viewModel.deleteRange(range)
+                                            readingSelection = TextRange.Zero
+                                            contextMenuSelectedRange = null
+                                            viewModel.ttsWrapper.speakFeedback("Deleted")
+                                        }
+                                        showContextMenu = false
+                                        showColorPickerInMenu = false
+                                    }
+                                )
+                            }
+
+                            // In-place Color Palette Row
+                            if (showColorPickerInMenu) {
+                                HorizontalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                                Row(
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val quickColors = listOf(
+                                        0xFF38BDF8L to "Sky Blue",
+                                        0xFF56D0DEL to "Cyan Teal",
+                                        0xFF2563EBL to "Royal Blue",
+                                        0xFF32D796L to "Mint Green",
+                                        0xFFFF6584L to "Coral Pink",
+                                        0xFFA855F7L to "Purple",
+                                        0xFFFF9800L to "Orange",
+                                        0xFFFFD600L to "Yellow"
+                                    )
+                                    quickColors.forEach { (colorHex, name) ->
+                                        Box(
+                                            modifier = Modifier
+                                                .size(24.dp)
+                                                .background(Color(colorHex), CircleShape)
+                                                .border(
+                                                    width = if (settings.highlightColorHex == colorHex) 2.dp else 1.dp,
+                                                    color = if (settings.highlightColorHex == colorHex) Color.White else Color(0x66FFFFFF),
+                                                    shape = CircleShape
+                                                )
+                                                .clickable {
+                                                    viewModel.updateHighlightColor(colorHex)
+                                                    viewModel.ttsWrapper.speakFeedback(name)
+                                                }
+                                        )
+                                    }
                                 }
-                            )
-
-                            VerticalDivider(
-                                color = Color(0xFF26344E),
-                                modifier = Modifier.height(28.dp)
-                            )
-
-                            // Read
-                            ContextMenuItem(
-                                icon = Icons.Default.VolumeUp,
-                                label = "Read",
-                                tint = Color(0xFF32D796),
-                                onClick = {
-                                    val start = contextMenuSelectedRange?.min ?: 0
-                                    showContextMenu = false
-                                    viewModel.playFrom(start)
-                                }
-                            )
-
-                            VerticalDivider(
-                                color = Color(0xFF26344E),
-                                modifier = Modifier.height(28.dp)
-                            )
-
-                            // Edit (Voice Replace)
-                            ContextMenuItem(
-                                icon = Icons.Default.Mic,
-                                label = "Edit",
-                                tint = Color(0xFFFFC700),
-                                onClick = {
-                                    showContextMenu = false
-                                    viewModel.openVoiceReplacePopup()
-                                }
-                            )
-
-                            VerticalDivider(
-                                color = Color(0xFF26344E),
-                                modifier = Modifier.height(28.dp)
-                            )
-
-                            // Delete
-                            ContextMenuItem(
-                                icon = Icons.Default.DeleteOutline,
-                                label = "Delete",
-                                tint = Color(0xFFFF6584),
-                                onClick = {
-                                    showContextMenu = false
-                                    viewModel.deleteSelection()
-                                    viewModel.ttsWrapper.speakFeedback("Deleted")
-                                }
-                            )
+                            }
                         }
                     }
                 }
             }
 
-            // Bottom Minimal Reading Controls
+            // Bottom Right Minimal Reading Controls (Small Buttons)
             Surface(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-                    .wrapContentWidth(),
-                shape = RoundedCornerShape(36.dp),
-                color = Color(0xFF141A28),
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 20.dp)
+                    .wrapContentSize(),
+                shape = RoundedCornerShape(26.dp),
+                color = Color(0xFF141A28).copy(alpha = 0.95f),
                 border = BorderStroke(1.5.dp, Color(0xFF26344E)),
-                shadowElevation = 14.dp
+                shadowElevation = 10.dp
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Play Button
+                    // Customizable Function Button (Long-press to customize function)
+                    val isFuncActive = when (selectedFunction) {
+                        ReadingFunction.PARAGRAPH -> isParagraphModeActive
+                        else -> isPlaying
+                    }
+                    val buttonLabel = when (selectedFunction) {
+                        ReadingFunction.PARAGRAPH -> if (isParagraphModeActive) "Para: ON" else "Para: OFF"
+                        else -> selectedFunction.shortLabel
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isFuncActive) Color(0xFF56D0DE).copy(alpha = 0.22f) else Color(0xFF1E2638),
+                        border = BorderStroke(
+                            1.5.dp,
+                            if (isFuncActive) Color(0xFF56D0DE) else Color(0xFF334155)
+                        ),
+                        modifier = Modifier
+                            .height(44.dp)
+                            .testTag("reading_mode_custom_action_button")
+                            .pointerInput(selectedFunction, isParagraphModeActive, textValue.text, isPlaying, readingSelection) {
+                                detectTapGestures(
+                                    onLongPress = {
+                                        showFunctionPickerDialog = true
+                                    },
+                                    onTap = {
+                                        when (selectedFunction) {
+                                            ReadingFunction.PARAGRAPH -> {
+                                                isParagraphModeActive = !isParagraphModeActive
+                                                if (isParagraphModeActive) {
+                                                    viewModel.ttsWrapper.speakFeedback("Paragraph mode on. Tap any paragraph to read.")
+                                                } else {
+                                                    viewModel.ttsWrapper.speakFeedback("Paragraph mode off")
+                                                }
+                                            }
+                                            ReadingFunction.READ_FROM_TOP -> {
+                                                viewModel.playReadingModeFromTop()
+                                            }
+                                            ReadingFunction.PLAY_FROM_CURSOR -> {
+                                                val start = readingSelection.min.coerceIn(0, textValue.text.length)
+                                                viewModel.playFrom(start)
+                                            }
+                                            ReadingFunction.SENTENCE_READ -> {
+                                                val range = findSentenceRange(textValue.text, readingSelection.min)
+                                                if (range.length > 0) {
+                                                    readingSelection = range
+                                                    contextMenuSelectedRange = range
+                                                    viewModel.playFrom(range.start, range.end)
+                                                } else {
+                                                    viewModel.ttsWrapper.speakFeedback("No sentence found")
+                                                }
+                                            }
+                                            ReadingFunction.CHARACTER_READ -> {
+                                                val cur = readingSelection.min.coerceIn(0, textValue.text.length)
+                                                if (cur < textValue.text.length) {
+                                                    val ch = textValue.text[cur].toString()
+                                                    val desc = when (ch) {
+                                                        " " -> "Space"
+                                                        "\n" -> "New line"
+                                                        "\t" -> "Tab"
+                                                        else -> ch
+                                                    }
+                                                    viewModel.ttsWrapper.speakFeedback(desc)
+                                                    val next = (cur + 1).coerceAtMost(textValue.text.length)
+                                                    readingSelection = TextRange(next, next)
+                                                } else {
+                                                    viewModel.ttsWrapper.speakFeedback("End of text")
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = selectedFunction.icon,
+                                contentDescription = selectedFunction.title,
+                                tint = if (isFuncActive) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = buttonLabel,
+                                color = if (isFuncActive) Color(0xFF56D0DE) else Color(0xFFECEEF2),
+                                fontSize = 13.sp,
+                                fontWeight = if (isFuncActive) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Play / Stop Button (Small button in bottom right)
                     Surface(
                         onClick = {
                             if (isPlaying) {
                                 viewModel.stopPlayback()
                             } else {
-                                viewModel.playReadingModeFromTop()
+                                when (selectedFunction) {
+                                    ReadingFunction.READ_FROM_TOP -> viewModel.playReadingModeFromTop()
+                                    else -> viewModel.playReadingSelection(readingSelection)
+                                }
                             }
                         },
                         shape = CircleShape,
                         color = if (isPlaying) Color(0xFFFF4D6D) else Color(0xFF2563EB),
                         border = BorderStroke(
-                            2.dp,
+                            1.5.dp,
                             if (isPlaying) Color(0xFFFF8DA1) else Color(0xFF60A5FA)
                         ),
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(44.dp)
                             .testTag("reading_mode_play_button")
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = if (isPlaying) Icons.Default.Stop else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "Stop Reading" else "Read from Top",
+                                contentDescription = if (isPlaying) "Stop Reading" else "Read",
                                 tint = Color.White,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                    }
-
-                    // Paragraph Toggle Button
-                    Surface(
-                        onClick = {
-                            isParagraphModeActive = !isParagraphModeActive
-                            if (isParagraphModeActive) {
-                                viewModel.ttsWrapper.speakFeedback("Paragraph mode active. Tap any paragraph to read.")
-                            } else {
-                                viewModel.ttsWrapper.speakFeedback("Paragraph mode off")
-                            }
-                        },
-                        shape = RoundedCornerShape(22.dp),
-                        color = if (isParagraphModeActive) Color(0xFF56D0DE).copy(alpha = 0.22f) else Color(0xFF1E2638),
-                        border = BorderStroke(
-                            1.5.dp,
-                            if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFF334155)
-                        ),
-                        modifier = Modifier
-                            .height(52.dp)
-                            .testTag("reading_mode_paragraph_toggle")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Segment,
-                                contentDescription = "Paragraph Mode Toggle",
-                                tint = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
                                 modifier = Modifier.size(24.dp)
-                            )
-                            Text(
-                                text = if (isParagraphModeActive) "Paragraph: ON" else "Paragraph: OFF",
-                                color = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
-                                fontSize = 14.sp,
-                                fontWeight = if (isParagraphModeActive) FontWeight.Bold else FontWeight.Medium
                             )
                         }
                     }
                 }
             }
 
+            // Function Picker Dialog for Long Pressing the Quick Button
+            if (showFunctionPickerDialog) {
+                AlertDialog(
+                    onDismissRequest = { showFunctionPickerDialog = false },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Palette,
+                                contentDescription = null,
+                                tint = Color(0xFF56D0DE)
+                            )
+                            Text(
+                                text = "Assign Button Function",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFECEEF2)
+                            )
+                        }
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Choose a function to replace the button. Long-press the button anytime to change again:",
+                                fontSize = 13.sp,
+                                color = Color(0xFF8FA7D8),
+                                modifier = Modifier.padding(bottom = 6.dp)
+                            )
+
+                            ReadingFunction.values().forEach { func ->
+                                val isSelected = selectedFunction == func
+                                Surface(
+                                    onClick = {
+                                        selectedFunction = func
+                                        showFunctionPickerDialog = false
+                                        viewModel.ttsWrapper.speakFeedback("Button set to ${func.title}")
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isSelected) Color(0xFF2563EB).copy(alpha = 0.25f) else Color(0xFF1E283E),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) Color(0xFF56D0DE) else Color(0xFF2E3A52)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .background(
+                                                    if (isSelected) Color(0xFF56D0DE).copy(alpha = 0.2f) else Color(0xFF161E30),
+                                                    CircleShape
+                                                ),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = func.icon,
+                                                contentDescription = null,
+                                                tint = if (isSelected) Color(0xFF56D0DE) else Color(0xFF8FA7D8),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = func.title,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isSelected) Color(0xFF56D0DE) else Color(0xFFECEEF2)
+                                            )
+                                            Text(
+                                                text = func.description,
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF8FA7D8)
+                                            )
+                                        }
+
+                                        if (isSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = "Selected",
+                                                tint = Color(0xFF56D0DE),
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showFunctionPickerDialog = false }) {
+                            Text("Close", color = Color(0xFF56D0DE), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = Color(0xFF141A28),
+                    shape = RoundedCornerShape(20.dp)
+                )
+            }
+
             // Voice Replace Popup reuse
             if (showReplacePopup) {
-                ReplacePopup(viewModel = viewModel)
+                val targetText = remember(contextMenuSelectedRange, textValue.text) {
+                    val r = contextMenuSelectedRange
+                    if (r != null && r.length > 0 && r.max <= textValue.text.length) {
+                        textValue.text.substring(r.min, r.max)
+                    } else null
+                }
+                ReplacePopup(
+                    viewModel = viewModel,
+                    initialTargetText = targetText,
+                    onApplyReplace = { newText ->
+                        val r = contextMenuSelectedRange
+                        if (r != null && r.length > 0) {
+                            viewModel.replaceRange(r, newText)
+                            readingSelection = TextRange(r.min + newText.length)
+                            contextMenuSelectedRange = null
+                        } else {
+                            viewModel.applyReplace(targetText ?: "", newText)
+                        }
+                    }
+                )
             }
         }
     }

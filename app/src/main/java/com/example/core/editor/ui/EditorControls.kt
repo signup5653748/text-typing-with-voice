@@ -61,6 +61,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.SettingsEntity
+import com.example.ui.components.SelectionDragHandles
 import com.example.ui.components.SelectionHighlightTransformation
 import com.example.ui.components.instantClickable
 
@@ -100,6 +101,12 @@ fun EditorTextArea(
     val isCursorVisible = !kbLockActive && textValue.selection.collapsed &&
             transientHighlightRange == null && speechHighlightRange == null
 
+    val cachedOffsetMap = remember(textValue.text, settings.hideHeadingSymbols) {
+        if (settings.hideHeadingSymbols && textValue.text.isNotEmpty()) {
+            SelectionHighlightTransformation.computeOffsetMap(textValue.text)
+        } else null
+    }
+
     Box(
         modifier = modifier.then(
             if (kbLockActive) {
@@ -108,7 +115,8 @@ fun EditorTextArea(
                         keyboardController?.hide()
                         localLayoutResult?.let { layout ->
                             val offset = layout.getOffsetForPosition(tapOffset)
-                            onCaretTap(offset)
+                            val origOffset = SelectionHighlightTransformation.transformedToOriginal(offset, cachedOffsetMap)
+                            onCaretTap(origOffset)
                         }
                     }
                 }
@@ -144,7 +152,8 @@ fun EditorTextArea(
                     transientHighlightRange,
                     speechHighlightRange,
                     highlightColor,
-                    settings.hideHeadingSymbols
+                    settings.hideHeadingSymbols,
+                    cachedOffsetMap
                 ) {
                     val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
                     SelectionHighlightTransformation(
@@ -154,7 +163,8 @@ fun EditorTextArea(
                         highlightColor = highlightColor.copy(alpha = 0.7f),
                         speechHighlightColor = Color(0xFF00E5FF),
                         highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White,
-                        hideHeadingSymbols = settings.hideHeadingSymbols
+                        hideHeadingSymbols = settings.hideHeadingSymbols,
+                        cachedMapping = cachedOffsetMap
                     )
                 },
                 cursorBrush = SolidColor(Color.Transparent),
@@ -175,10 +185,32 @@ fun EditorTextArea(
         }
 
         if (isCursorVisible) {
+            val transCaret = remember(textValue.selection.end, cachedOffsetMap, settings.hideHeadingSymbols) {
+                if (settings.hideHeadingSymbols && cachedOffsetMap != null) {
+                    SelectionHighlightTransformation.originalToTransformed(textValue.selection.end, cachedOffsetMap)
+                } else {
+                    textValue.selection.end
+                }
+            }
             BlinkingCursorOverlay(
                 layout = localLayoutResult,
-                caretOffset = textValue.selection.end,
+                caretOffset = transCaret,
                 highlightColor = highlightColor,
+                modifier = Modifier.matchParentSize()
+            )
+        }
+
+        if (textValue.selection.length > 0) {
+            SelectionDragHandles(
+                text = textValue.text,
+                selection = textValue.selection,
+                layoutResult = localLayoutResult,
+                hideHeadingSymbols = settings.hideHeadingSymbols,
+                highlightColor = highlightColor,
+                cachedMapping = cachedOffsetMap,
+                onSelectionChange = { newRange ->
+                    onTextChanged(textValue.copy(selection = newRange))
+                },
                 modifier = Modifier.matchParentSize()
             )
         }
@@ -192,6 +224,18 @@ fun BlinkingCursorOverlay(
     highlightColor: Color,
     modifier: Modifier = Modifier
 ) {
+    val cursorRect = remember(layout, caretOffset) {
+        if (layout != null) {
+            try {
+                val maxLayoutOffset = layout.layoutInput.text.length
+                val caret = caretOffset.coerceIn(0, maxLayoutOffset)
+                layout.getCursorRect(caret)
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
+
     val infiniteTransition = rememberInfiniteTransition(label = "CursorBlink")
     val cursorAlpha by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -204,18 +248,13 @@ fun BlinkingCursorOverlay(
     )
 
     Canvas(modifier = modifier) {
-        if (layout != null) {
-            try {
-                val maxLayoutOffset = layout.layoutInput.text.length
-                val caret = caretOffset.coerceIn(0, maxLayoutOffset)
-                val rect = layout.getCursorRect(caret)
-                drawRoundRect(
-                    color = highlightColor.copy(alpha = cursorAlpha),
-                    topLeft = Offset(rect.left, rect.top),
-                    size = Size(2.5.dp.toPx(), rect.height),
-                    cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
-                )
-            } catch (_: Exception) {}
+        cursorRect?.let { rect ->
+            drawRoundRect(
+                color = highlightColor.copy(alpha = cursorAlpha),
+                topLeft = Offset(rect.left, rect.top),
+                size = Size(2.5.dp.toPx(), rect.height),
+                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
+            )
         }
     }
 }

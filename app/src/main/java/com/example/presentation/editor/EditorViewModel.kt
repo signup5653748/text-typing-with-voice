@@ -154,9 +154,7 @@ open class EditorViewModel(
         viewModelScope.launch {
             speechWrapper.finalResult.collect { result ->
                 if (!result.isNullOrBlank()) {
-                    if (_showReplacePopup.value) {
-                        applyReplace(result)
-                    } else {
+                    if (!_showReplacePopup.value) {
                         insertTextAtCursor(result)
                         ttsWrapper.speakFeedback(result)
                     }
@@ -420,10 +418,14 @@ open class EditorViewModel(
     }
 
     fun setSelectionRange(range: TextRange) {
-        val docLen = _textValue.value.text.length
+        val current = _textValue.value
+        val docLen = current.text.length
         val safeStart = range.start.coerceIn(0, docLen)
         val safeEnd = range.end.coerceIn(0, docLen)
-        _textValue.value = _textValue.value.copy(selection = TextRange(safeStart, safeEnd), composition = null)
+        if (current.selection.start == safeStart && current.selection.end == safeEnd && _transientHighlightRange.value == null) {
+            return
+        }
+        _textValue.value = current.copy(selection = TextRange(safeStart, safeEnd), composition = null)
         _selActive.value = safeStart != safeEnd
         _transientHighlightRange.value = null
     }
@@ -438,6 +440,70 @@ open class EditorViewModel(
 
     fun addNewLine() = onAction(ActionButton.ENTER)
     fun deleteSelection() = onAction(ActionButton.DELETE)
+
+    /**
+     * Standalone delete operation for ranges (e.g. from Reading Mode),
+     * without overwriting or coupling with the Editor screen's selection.
+     */
+    fun deleteRange(range: TextRange) {
+        val current = _textValue.value
+        if (range.length <= 0) return
+        recordSnapshot(current)
+        val start = range.min.coerceIn(0, current.text.length)
+        val end = range.max.coerceIn(0, current.text.length)
+        val newString = current.text.substring(0, start) + current.text.substring(end)
+        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
+        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        _textValue.value = current.copy(
+            text = newString,
+            selection = TextRange(homeSelStart, homeSelEnd),
+            composition = null
+        )
+        cachedHeadings = null
+        persistDraft()
+    }
+
+    /**
+     * Standalone replace operation for ranges (e.g. from Reading Mode),
+     * preserving Editor screen's independent selection state.
+     */
+    fun replaceRange(range: TextRange, newText: String) {
+        val current = _textValue.value
+        recordSnapshot(current)
+        val start = range.min.coerceIn(0, current.text.length)
+        val end = range.max.coerceIn(0, current.text.length)
+        val newString = current.text.substring(0, start) + newText + current.text.substring(end)
+        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
+        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        _textValue.value = current.copy(
+            text = newString,
+            selection = TextRange(homeSelStart, homeSelEnd),
+            composition = null
+        )
+        cachedHeadings = null
+        persistDraft()
+    }
+
+    /**
+     * Standalone speech playback from Reading Mode's independent selection/cursor.
+     */
+    fun playReadingSelection(range: TextRange) {
+        val docText = _textValue.value.text
+        if (docText.isBlank()) {
+            ttsWrapper.speakFeedback("Document is empty")
+            return
+        }
+        if (range.length > 0) {
+            playFrom(range.min, range.max)
+        } else {
+            val start = range.min.coerceIn(0, docText.length)
+            if (start < docText.length && docText.substring(start).isNotBlank()) {
+                playFrom(start, docText.length)
+            } else {
+                playFrom(0, docText.length)
+            }
+        }
+    }
 
     // --- Audio Playback & Voice ---
 
@@ -506,6 +572,14 @@ open class EditorViewModel(
         speechWrapper.clearResults()
     }
 
+    fun getSelectedText(): String {
+        val current = _textValue.value
+        val sel = current.selection
+        return if (sel.length > 0 && sel.max <= current.text.length) {
+            current.text.substring(sel.min, sel.max)
+        } else ""
+    }
+
     fun applyReplace(newText: String) {
         val current = _textValue.value
         recordSnapshot(current)
@@ -518,6 +592,56 @@ open class EditorViewModel(
         persistDraft()
         closeReplacePopup()
         ttsWrapper.speakFeedback(if (newText.isNotBlank()) newText else "Replaced text")
+    }
+
+    fun applyReplace(findText: String, newText: String) {
+        val current = _textValue.value
+        recordSnapshot(current)
+        val currentSel = current.selection
+        val newString: String
+        val newCaret: Int
+
+        if (currentSel.length > 0 && current.text.substring(currentSel.min, currentSel.max) == findText) {
+            newString = current.text.substring(0, currentSel.min) + newText + current.text.substring(currentSel.max)
+            newCaret = currentSel.min + newText.length
+        } else if (findText.isNotEmpty()) {
+            val idx = current.text.indexOf(findText, startIndex = currentSel.end.coerceIn(0, current.text.length))
+                .let { if (it >= 0) it else current.text.indexOf(findText) }
+            if (idx >= 0) {
+                newString = current.text.substring(0, idx) + newText + current.text.substring(idx + findText.length)
+                newCaret = idx + newText.length
+            } else {
+                newString = current.text.substring(0, currentSel.min) + newText + current.text.substring(currentSel.max)
+                newCaret = currentSel.min + newText.length
+            }
+        } else {
+            newString = current.text.substring(0, currentSel.min) + newText + current.text.substring(currentSel.max)
+            newCaret = currentSel.min + newText.length
+        }
+
+        _textValue.value = current.copy(text = newString, selection = TextRange(newCaret), composition = null)
+        cachedHeadings = null
+        resetCursorState()
+        persistDraft()
+        closeReplacePopup()
+        ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Replaced" else "Deleted")
+    }
+
+    fun applyReplaceAll(findText: String, newText: String) {
+        if (findText.isEmpty()) {
+            applyReplace(newText)
+            return
+        }
+        val current = _textValue.value
+        recordSnapshot(current)
+        val count = current.text.split(findText).size - 1
+        val newString = current.text.replace(findText, newText)
+        _textValue.value = current.copy(text = newString, selection = TextRange(0), composition = null)
+        cachedHeadings = null
+        resetCursorState()
+        persistDraft()
+        closeReplacePopup()
+        ttsWrapper.speakFeedback("Replaced $count occurrences")
     }
 
     private fun insertTextAtCursor(textToInsert: String) {
@@ -917,6 +1041,12 @@ open class EditorViewModel(
         _selActive.value = false
         _transientHighlightRange.value = null
         _textValue.value = selectionManager.resetCursorState(_textValue.value)
+    }
+
+    fun updateStartOnReadingScreen(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepo.updateStartOnReadingScreen(enabled)
+        }
     }
 
     override fun onCleared() {
