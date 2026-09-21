@@ -1,7 +1,6 @@
-package com.example.ui.screens
+package com.example.presentation.categories
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,6 +13,8 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,15 +32,18 @@ fun SettingsCategoriesScreen(
     onNavigateToGeneral: () -> Unit,
     onNavigateToSpeech: () -> Unit,
     onNavigateToLayout: () -> Unit,
-    onNavigateToAdvanced: () -> Unit
+    onNavigateToAdvanced: () -> Unit,
+    viewModel: SettingsCategoriesViewModel = viewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
+
     Scaffold(
         containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        "Settings",
+                        uiState.title,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFFECEFF8)
                     )
@@ -70,8 +75,8 @@ fun SettingsCategoriesScreen(
                     icon = Icons.Default.Palette,
                     iconBg = Color(0xFF2563EB).copy(alpha = 0.2f),
                     iconTint = Color(0xFF60A5FA),
-                    title = "General",
-                    description = "Theme, highlight color, background, text color & text size",
+                    title = "General & Appearance",
+                    description = "Theme, highlight & background colors, font size & headings",
                     onClick = onNavigateToGeneral
                 )
             }
@@ -81,8 +86,8 @@ fun SettingsCategoriesScreen(
                     icon = Icons.Default.Mic,
                     iconBg = Color(0xFF059669).copy(alpha = 0.2f),
                     iconTint = Color(0xFF34D399),
-                    title = "Speech",
-                    description = "TTS engine, language voices & speech recognition",
+                    title = "Speech & Voice",
+                    description = "Dictation language, TTS voice, engine, speed & pitch",
                     onClick = onNavigateToSpeech
                 )
             }
@@ -92,8 +97,8 @@ fun SettingsCategoriesScreen(
                     icon = Icons.Default.DashboardCustomize,
                     iconBg = Color(0xFF7C3AED).copy(alpha = 0.2f),
                     iconTint = Color(0xFFA78BFA),
-                    title = "Layout",
-                    description = "Button scale, D-pad size & custom button arrangement",
+                    title = "Layout & Buttons",
+                    description = "Arrow button sizes, visibility & custom arrangement",
                     onClick = onNavigateToLayout
                 )
             }

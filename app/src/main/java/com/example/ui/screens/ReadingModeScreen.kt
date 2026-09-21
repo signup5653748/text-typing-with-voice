@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -91,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.logic.CursorLogic
+import com.example.presentation.editor.EditorViewModel
 import com.example.ui.components.SelectionHighlightTransformation
 
 private val ReadingEmptyTextToolbar = object : TextToolbar {
@@ -343,6 +345,89 @@ fun ReadingModeScreen(
                             },
                             modifier = Modifier.background(Color(0xFF161E30))
                         ) {
+                            // Play from cursor
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Play from cursor",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Play from cursor",
+                                        tint = Color(0xFF32D796)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.togglePlay()
+                                }
+                            )
+
+                            // Play from beginning
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Play from beginning",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Play from beginning",
+                                        tint = Color(0xFF56D0DE)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.playReadingModeFromTop()
+                                }
+                            )
+
+                            // Paragraph mode toggle
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        if (isParagraphModeActive) "Paragraph Mode: ON" else "Paragraph Mode: OFF",
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Segment,
+                                        contentDescription = "Paragraph Mode Toggle",
+                                        tint = if (isParagraphModeActive) Color(0xFF56D0DE) else Color(0xFF8FA7D8)
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (isParagraphModeActive) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = "Active",
+                                            tint = Color(0xFF56D0DE),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    isParagraphModeActive = !isParagraphModeActive
+                                    if (isParagraphModeActive) {
+                                        viewModel.ttsWrapper.speakFeedback("Paragraph mode active. Tap any paragraph to read.")
+                                    } else {
+                                        viewModel.ttsWrapper.speakFeedback("Paragraph mode off")
+                                    }
+                                    menuExpanded = false
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF26344E))
+
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -454,58 +539,6 @@ fun ReadingModeScreen(
                     .fillMaxSize()
                     .verticalScroll(scrollState)
                     .padding(horizontal = 20.dp, vertical = 16.dp)
-                    .pointerInput(isParagraphModeActive, textValue.text, settings.hideHeadingSymbols) {
-                        detectTapGestures(
-                            onTap = { tapOffset ->
-                                if (showContextMenu) {
-                                    showContextMenu = false
-                                    viewModel.clearSelection()
-                                    return@detectTapGestures
-                                }
-
-                                localLayoutResult?.let { layout ->
-                                    val transOffset = layout.getOffsetForPosition(tapOffset)
-                                    val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                        textValue.text,
-                                        transOffset,
-                                        settings.hideHeadingSymbols
-                                    )
-
-                                    if (isParagraphModeActive) {
-                                        val paraRange = findParagraphRange(textValue.text, origOffset)
-                                        viewModel.playFrom(paraRange.start)
-                                    } else {
-                                        viewModel.setCaretFromTap(origOffset)
-                                    }
-                                }
-                            },
-                            onLongPress = { longPressOffset ->
-                                localLayoutResult?.let { layout ->
-                                    val transOffset = layout.getOffsetForPosition(longPressOffset)
-                                    val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                        textValue.text,
-                                        transOffset,
-                                        settings.hideHeadingSymbols
-                                    )
-
-                                    val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset).let {
-                                        if (it.start == it.end && textValue.text.isNotEmpty()) {
-                                            val s = origOffset.coerceIn(0, textValue.text.length)
-                                            val e = (origOffset + 1).coerceIn(0, textValue.text.length)
-                                            TextRange(s, e)
-                                        } else it
-                                    }
-
-                                    if (wordRange.length > 0) {
-                                        viewModel.setSelectionRange(wordRange)
-                                        contextMenuTouchOffset = longPressOffset
-                                        contextMenuSelectedRange = wordRange
-                                        showContextMenu = true
-                                    }
-                                }
-                            }
-                        )
-                    }
             ) {
                 CompositionLocalProvider(
                     LocalTextSelectionColors provides InvisibleSelectionColors,
@@ -531,6 +564,64 @@ fun ReadingModeScreen(
                         onTextLayout = { localLayoutResult = it }
                     )
                 }
+
+                // Transparent overlay to reliably capture taps and long-presses over the text
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .pointerInput(isParagraphModeActive, textValue.text, settings.hideHeadingSymbols) {
+                            detectTapGestures(
+                                onTap = { tapOffset ->
+                                    if (showContextMenu) {
+                                        showContextMenu = false
+                                        viewModel.clearSelection()
+                                        return@detectTapGestures
+                                    }
+
+                                    localLayoutResult?.let { layout ->
+                                        val transOffset = layout.getOffsetForPosition(tapOffset)
+                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                            textValue.text,
+                                            transOffset,
+                                            settings.hideHeadingSymbols
+                                        )
+
+                                        if (isParagraphModeActive) {
+                                            val paraRange = findParagraphRange(textValue.text, origOffset)
+                                            viewModel.playFrom(paraRange.start, paraRange.end)
+                                        } else {
+                                            viewModel.setCaretFromTap(origOffset)
+                                        }
+                                    }
+                                },
+                                onLongPress = { longPressOffset ->
+                                    localLayoutResult?.let { layout ->
+                                        val transOffset = layout.getOffsetForPosition(longPressOffset)
+                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                            textValue.text,
+                                            transOffset,
+                                            settings.hideHeadingSymbols
+                                        )
+
+                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset).let {
+                                            if (it.start == it.end && textValue.text.isNotEmpty()) {
+                                                val s = origOffset.coerceIn(0, textValue.text.length)
+                                                val e = (origOffset + 1).coerceIn(0, textValue.text.length)
+                                                TextRange(s, e)
+                                            } else it
+                                        }
+
+                                        if (wordRange.length > 0) {
+                                            viewModel.setSelectionRange(wordRange)
+                                            contextMenuTouchOffset = longPressOffset
+                                            contextMenuSelectedRange = wordRange
+                                            showContextMenu = true
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                )
             }
 
             // Custom Long-Press Context Menu Popup

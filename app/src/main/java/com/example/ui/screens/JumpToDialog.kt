@@ -1,14 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -21,6 +18,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.editor.dialogs.HeadingEmptyState
+import com.example.core.editor.dialogs.HeadingRowItem
 import com.example.logic.HeadingItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -157,37 +156,7 @@ fun JumpToDialog(
 
             // Headings List or Empty State
             if (filteredHeadings.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 28.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.List,
-                            contentDescription = null,
-                            tint = Color(0xFF4A5568),
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Text(
-                            text = if (searchQuery.isNotEmpty()) "No matching headings" else "No headings found in document",
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFECEFF8),
-                            fontSize = 15.sp
-                        )
-                        Text(
-                            text = "Start any line with ▫️ symbols (e.g. ▫️ Heading, ▫️▫️ Subheading up to 15 levels) to create jump destinations.",
-                            color = Color(0xFF8FA7D8),
-                            fontSize = 13.sp,
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-                    }
-                }
+                HeadingEmptyState(searchQuery = searchQuery)
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -204,65 +173,5 @@ fun JumpToDialog(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun HeadingRowItem(
-    item: HeadingItem,
-    onClick: () -> Unit
-) {
-    val indentPadding = ((item.level - 1) * 10).coerceIn(0, 80).dp
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF192235))
-            .border(1.dp, Color(0xFF26344E), RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .padding(start = indentPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Depth symbol indicator (strictly symbols only, no numeric labels)
-            Text(
-                text = item.symbolsText,
-                color = when (item.level) {
-                    1 -> Color(0xFF56D0DE)
-                    2 -> Color(0xFF60A5FA)
-                    3 -> Color(0xFFA78BFA)
-                    4 -> Color(0xFF34D399)
-                    else -> Color(0xFFFFD600)
-                },
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-
-            // Heading title
-            Text(
-                text = item.headingText,
-                color = Color(0xFFECEFF8),
-                fontSize = 14.sp,
-                fontWeight = if (item.level <= 2) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-            )
-        }
-
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = "Jump",
-            tint = Color(0xFF6B7FA8),
-            modifier = Modifier.size(16.dp)
-        )
     }
 }

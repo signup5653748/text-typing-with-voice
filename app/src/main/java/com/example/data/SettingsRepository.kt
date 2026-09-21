@@ -450,6 +450,12 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateDisabledSpeechFeedbackButtons(disabledString: String) {
+        context.dataStore.edit { prefs ->
+            prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] = disabledString
+        }
+    }
+
     suspend fun toggleSpeechFeedbackForButton(buttonName: String) {
         context.dataStore.edit { prefs ->
             val current = (prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "").split(",").map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()

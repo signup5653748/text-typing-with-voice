@@ -5,62 +5,34 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.selection.LocalTextSelectionColors
-import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Backspace
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardReturn
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalTextToolbar
-import androidx.compose.ui.platform.TextToolbar
-import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.example.core.editor.dialogs.ReplaceActionRow
+import com.example.core.editor.dialogs.ReplaceDialogButtons
+import com.example.core.editor.dialogs.ReplaceNavigationCluster
+import com.example.core.editor.dialogs.ReplacePreviewBox
 import com.example.logic.ArrowDirection
 import com.example.logic.CursorLogic
-import com.example.ui.components.ArrowKeyCluster
-import com.example.ui.components.SelectionHighlightTransformation
+import com.example.presentation.editor.EditorViewModel
 import kotlinx.coroutines.delay
-
-private val PopupEmptyTextToolbar = object : TextToolbar {
-    override val status: TextToolbarStatus = TextToolbarStatus.Hidden
-    override fun hide() {}
-    override fun showMenu(
-        rect: androidx.compose.ui.geometry.Rect,
-        onCopyRequested: (() -> Unit)?,
-        onPasteRequested: (() -> Unit)?,
-        onCutRequested: (() -> Unit)?,
-        onSelectAllRequested: (() -> Unit)?
-    ) {}
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -286,293 +258,87 @@ fun ReplacePopup(viewModel: EditorViewModel) {
             Spacer(modifier = Modifier.height(8.dp))
 
             // Sandbox preview text area
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFF0C0D10))
-                    .border(1.5.dp, if (isListening) Color(0xFF56D0DE) else Color(0xFF242E44), RoundedCornerShape(12.dp))
-                    .padding(14.dp)
-            ) {
-                if (previewText.text.isEmpty()) {
-                    if (isListening && partialResults.isNotBlank()) {
-                        Text(
-                            text = partialResults,
-                            color = Color(0xFF56D0DE),
-                            fontSize = 17.sp,
-                            lineHeight = 25.sp,
-                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
-                        )
-                    } else {
-                        Text(
-                            if (isListening) "Listening... speak replacement text" else "Speak or edit replacement text...",
-                            color = if (isListening) Color(0xFF56D0DE) else Color(0xFF6B7280),
-                            fontSize = 17.sp
-                        )
-                    }
-                }
-
-                val invisibleSelectionColors = remember {
-                    TextSelectionColors(
-                        handleColor = Color.Transparent,
-                        backgroundColor = Color.Transparent
-                    )
-                }
-                CompositionLocalProvider(
-                    LocalTextSelectionColors provides invisibleSelectionColors,
-                    LocalTextToolbar provides PopupEmptyTextToolbar
-                ) {
-                    BasicTextField(
-                        value = previewText,
-                        onValueChange = { 
-                            previewText = it
-                            if (selActive) selActive = false
-                            selAnchor = null
-                            idealX = null
-                            transientHighlight = null
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                        textStyle = TextStyle(
-                            color = Color(0xFFECEEF2),
-                            fontSize = 17.sp,
-                            lineHeight = 25.sp
-                        ),
-                        visualTransformation = remember(previewText.selection, transientHighlight, highlightColor) {
-                            val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
-                            SelectionHighlightTransformation(
-                                selection = previewText.selection,
-                                transientHighlight = transientHighlight,
-                                highlightColor = highlightColor.copy(alpha = 0.7f),
-                                highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White
-                            )
-                        },
-                        cursorBrush = SolidColor(Color.Transparent),
-                        onTextLayout = { layoutResult = it }
-                    )
-                }
-
-                Canvas(modifier = Modifier.matchParentSize()) {
-                    val layout = layoutResult
-                    if (layout != null && previewText.selection.collapsed) {
-                        try {
-                            val maxLayoutOffset = layout.layoutInput.text.length
-                            val caret = previewText.selection.end.coerceIn(0, maxLayoutOffset)
-                            val rect = layout.getCursorRect(caret)
-                            drawRoundRect(
-                                color = highlightColor.copy(alpha = cursorAlpha.value),
-                                topLeft = Offset(rect.left, rect.top),
-                                size = Size(2.5.dp.toPx(), rect.height),
-                                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx())
-                            )
-                        } catch (e: Exception) {
-                            // Ignore race condition between text edit and layout calculation
-                        }
-                    }
-                }
-            }
+            ReplacePreviewBox(
+                previewText = previewText,
+                onPreviewTextChange = {
+                    previewText = it
+                    if (selActive) selActive = false
+                    selAnchor = null
+                    idealX = null
+                    transientHighlight = null
+                },
+                isListening = isListening,
+                partialResults = partialResults,
+                highlightColor = highlightColor,
+                cursorAlpha = cursorAlpha,
+                transientHighlight = transientHighlight,
+                layoutResult = layoutResult,
+                onTextLayout = { layoutResult = it },
+                modifier = Modifier.weight(1f)
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
 
             // Editing action row: Mode toggle (K), Delete, Enter
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // K (Char / Word) Toggle
-                Surface(
-                    onClick = {
-                        kActive = !kActive
-                        viewModel.ttsWrapper.speakFeedback(if (kActive) "Character mode" else "Word mode")
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (kActive) Color(0xFF56D0DE) else Color(0xFF1E283C),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (kActive) Color(0xFF56D0DE) else Color(0xFF334155)),
-                    modifier = Modifier.weight(1f).height(46.dp)
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            "K",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (kActive) Color(0xFF0A1926) else Color.White
-                        )
-                        Text(
-                            if (kActive) "CHAR" else "WORD",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (kActive) Color(0xFF0A1926) else Color(0xFF8FA7D8)
-                        )
-                    }
-                }
-
-                // Delete Button
-                Surface(
-                    onClick = { handleDelete() },
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF1E283C),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-                    modifier = Modifier.weight(1f).height(46.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            Icons.Default.Backspace,
-                            contentDescription = "Delete",
-                            tint = Color(0xFFFF6B8A),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            "DEL",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFECEFF8)
-                        )
-                    }
-                }
-
-                // Enter Button
-                Surface(
-                    onClick = { handleEnter() },
-                    shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFF1E283C),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-                    modifier = Modifier.weight(1f).height(46.dp)
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        Icon(
-                            Icons.Default.KeyboardReturn,
-                            contentDescription = "Enter",
-                            tint = Color(0xFF56D0DE),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            "ENTER",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFECEFF8)
-                        )
-                    }
-                }
-            }
+            ReplaceActionRow(
+                kActive = kActive,
+                onToggleK = {
+                    kActive = !kActive
+                    viewModel.ttsWrapper.speakFeedback(if (kActive) "Character mode" else "Word mode")
+                },
+                onDelete = { handleDelete() },
+                onEnter = { handleEnter() }
+            )
 
             Spacer(modifier = Modifier.height(10.dp))
 
             // Navigation & Voice Cluster: Mic Button on left + Arrow Cluster on right
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFF0E131F), RoundedCornerShape(14.dp))
-                    .padding(10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Mic Button inside popup (re-dictate / add speech)
-                Surface(
-                    onClick = {
-                        val hasPermission = ContextCompat.checkSelfPermission(
-                            context, Manifest.permission.RECORD_AUDIO
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) {
-                            if (isListening) viewModel.speechWrapper.stopListening()
-                            else viewModel.speechWrapper.startListening(settings.voiceLanguage)
-                        } else {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                    shape = CircleShape,
-                    color = if (isListening) Color(0xFFFF4B6E) else Color(0xFF2563EB),
-                    border = androidx.compose.foundation.BorderStroke(
-                        2.dp,
-                        if (isListening) Color.White else Color(0xFF93C5FD)
-                    ),
-                    modifier = Modifier
-                        .size(62.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                            contentDescription = if (isListening) "Stop dictating" else "Dictate more",
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp)
-                        )
+            ReplaceNavigationCluster(
+                isListening = isListening,
+                onMicClick = {
+                    val hasPermission = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.RECORD_AUDIO
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasPermission) {
+                        if (isListening) viewModel.speechWrapper.stopListening()
+                        else viewModel.speechWrapper.startListening(settings.voiceLanguage)
+                    } else {
+                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     }
-                }
-
-                // Arrow Cluster for popup navigation
-                ArrowKeyCluster(
-                    selActive = selActive,
-                    scale = (settings.arrowSize * 0.85f).coerceIn(0.7f, 1.2f),
-                    onMoveUp = { handleArrow(ArrowDirection.UP) },
-                    onMoveDown = { handleArrow(ArrowDirection.DOWN) },
-                    onMoveLeft = { handleArrow(ArrowDirection.LEFT) },
-                    onMoveRight = { handleArrow(ArrowDirection.RIGHT) },
-                    onToggleSel = { 
-                        selActive = !selActive
-                        if (selActive) {
-                            selAnchor = previewText.selection.end
-                            transientHighlight = null
-                            previewText = previewText.copy(selection = TextRange(selAnchor!!, selAnchor!!))
-                            viewModel.ttsWrapper.speakFeedback("Selection mode on")
-                        } else {
-                            selAnchor = null
-                            val c = previewText.selection.end
-                            previewText = previewText.copy(selection = TextRange(c, c))
-                            transientHighlight = null
-                            viewModel.ttsWrapper.speakFeedback("Selection mode off")
-                        }
-                    },
-                    activeHighlightColor = highlightColor,
-                    modifier = Modifier.wrapContentWidth()
-                )
-            }
+                },
+                selActive = selActive,
+                arrowScale = (settings.arrowSize * 0.85f).coerceIn(0.7f, 1.2f),
+                highlightColor = highlightColor,
+                onMoveUp = { handleArrow(ArrowDirection.UP) },
+                onMoveDown = { handleArrow(ArrowDirection.DOWN) },
+                onMoveLeft = { handleArrow(ArrowDirection.LEFT) },
+                onMoveRight = { handleArrow(ArrowDirection.RIGHT) },
+                onToggleSel = { 
+                    selActive = !selActive
+                    if (selActive) {
+                        selAnchor = previewText.selection.end
+                        transientHighlight = null
+                        previewText = previewText.copy(selection = TextRange(selAnchor!!, selAnchor!!))
+                        viewModel.ttsWrapper.speakFeedback("Selection mode on")
+                    } else {
+                        selAnchor = null
+                        val c = previewText.selection.end
+                        previewText = previewText.copy(selection = TextRange(c, c))
+                        transientHighlight = null
+                        viewModel.ttsWrapper.speakFeedback("Selection mode off")
+                    }
+                },
+                modifier = Modifier.background(Color(0xFF0E131F), RoundedCornerShape(14.dp))
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
             // Action buttons: Cancel and Done
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedButton(
-                    onClick = { viewModel.closeReplacePopup() },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF8FA7D8)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF334155)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) {
-                    Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                }
-
-                Button(
-                    onClick = { viewModel.applyReplace(previewText.text) },
-                    enabled = previewText.text.isNotEmpty(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF2563EB),
-                        disabledContainerColor = Color(0xFF1E293B)
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f).height(48.dp)
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Done", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            ReplaceDialogButtons(
+                onCancel = { viewModel.closeReplacePopup() },
+                onApply = { viewModel.applyReplace(previewText.text) },
+                canApply = previewText.text.isNotEmpty()
+            )
         }
     }
 }

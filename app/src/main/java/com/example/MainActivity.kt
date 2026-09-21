@@ -16,14 +16,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.ui.screens.AdvancedSettingsScreen
-import com.example.ui.screens.EditorScreen
-import com.example.ui.screens.EditorViewModel
-import com.example.ui.screens.GeneralSettingsScreen
-import com.example.ui.screens.LayoutSettingsScreen
+import com.example.presentation.advancedsettings.AdvancedSettingsScreen
+import com.example.presentation.categories.SettingsCategoriesScreen
+import com.example.presentation.editor.EditorScreen
+import com.example.presentation.editor.EditorViewModel
+import com.example.presentation.generalsettings.GeneralSettingsScreen
+import com.example.presentation.layoutsettings.LayoutSettingsScreen
+import com.example.presentation.speechsettings.SpeechSettingsScreen
 import com.example.ui.screens.ReadingModeScreen
-import com.example.ui.screens.SettingsCategoriesScreen
-import com.example.ui.screens.SpeechSettingsScreen
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -81,27 +81,23 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("settings/general") {
                             GeneralSettingsScreen(
-                                onNavigateBack = { navController.popBackStack() },
-                                viewModel = viewModel
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                         composable("settings/speech") {
                             SpeechSettingsScreen(
-                                onNavigateBack = { navController.popBackStack() },
-                                viewModel = viewModel
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                         composable("settings/layout") {
                             LayoutSettingsScreen(
-                                onNavigateBack = { navController.popBackStack() },
-                                viewModel = viewModel
+                                onNavigateBack = { navController.popBackStack() }
                             )
                         }
                         composable("settings/advanced") {
                             AdvancedSettingsScreen(
                                 onNavigateBack = { navController.popBackStack() },
-                                onNavigateToCustomLayout = { navController.navigate("settings/layout") },
-                                viewModel = viewModel
+                                onNavigateToCustomLayout = { navController.navigate("settings/layout") }
                             )
                         }
                     }

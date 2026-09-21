@@ -30,21 +30,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.editor.dialogs.CurrentDirectory
+import com.example.core.editor.dialogs.DirectoryLoader
+import com.example.core.editor.dialogs.FileEntry
+import com.example.core.editor.dialogs.FileOrFolderRow
+import com.example.core.editor.dialogs.NewFolderDialog
+import com.example.core.editor.dialogs.OverwriteConfirmDialog
+import com.example.core.editor.dialogs.StarredFolderCard
 import com.example.data.StarredFolder
+import com.example.presentation.editor.EditorViewModel
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-
-data class FileEntry(
-    val name: String,
-    val isDirectory: Boolean,
-    val path: String,
-    val sizeString: String = "",
-    val lastModifiedString: String = "",
-    val fileRef: File? = null,
-    val uriString: String? = null
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,7 +75,7 @@ fun SaveFileDialog(
     LaunchedEffect(currentFolderState) {
         val folder = currentFolderState
         if (folder != null) {
-            folderEntries = loadEntriesForDirectory(context, folder)
+            folderEntries = DirectoryLoader.loadEntriesForDirectory(context, folder)
         } else {
             folderEntries = emptyList()
         }
@@ -545,371 +540,48 @@ fun SaveFileDialog(
 
     // Dialog for creating a new subfolder
     if (showNewFolderDialog && currentFolderState != null) {
-        AlertDialog(
-            onDismissRequest = { showNewFolderDialog = false },
-            title = { Text("New Folder", color = Color(0xFFECEFF8)) },
-            text = {
-                OutlinedTextField(
-                    value = newFolderNameInput,
-                    onValueChange = { newFolderNameInput = it },
-                    singleLine = true,
-                    placeholder = { Text("Folder name") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color(0xFFECEFF8),
-                        unfocusedTextColor = Color(0xFFECEFF8),
-                        focusedBorderColor = Color(0xFF56D0DE),
-                        unfocusedBorderColor = Color(0xFF2A364F)
-                    )
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val name = newFolderNameInput.trim()
-                        if (name.isNotBlank() && currentFolderState != null) {
-                            val active = currentFolderState!!
-                            if (!active.isTreeUri) {
-                                val newDir = File(active.uriOrPath, name)
-                                newDir.mkdirs()
-                                folderEntries = loadEntriesForDirectory(context, active)
-                            }
-                        }
-                        showNewFolderDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                ) {
-                    Text("Create")
+        NewFolderDialog(
+            folderNameInput = newFolderNameInput,
+            onFolderNameInputChange = { newFolderNameInput = it },
+            onConfirm = {
+                val name = newFolderNameInput.trim()
+                if (name.isNotBlank() && currentFolderState != null) {
+                    val active = currentFolderState!!
+                    if (!active.isTreeUri) {
+                        val newDir = File(active.uriOrPath, name)
+                        newDir.mkdirs()
+                        folderEntries = DirectoryLoader.loadEntriesForDirectory(context, active)
+                    }
                 }
+                showNewFolderDialog = false
             },
-            dismissButton = {
-                TextButton(onClick = { showNewFolderDialog = false }) {
-                    Text("Cancel", color = Color(0xFF94A3B8))
-                }
-            },
-            containerColor = Color(0xFF1E293B)
+            onDismiss = { showNewFolderDialog = false }
         )
     }
 
     // Dialog for confirming overwrite of an existing file
     if (overwriteTargetFile != null) {
         val target = overwriteTargetFile!!
-        AlertDialog(
-            onDismissRequest = { overwriteTargetFile = null },
-            title = { Text("Overwrite File?", color = Color(0xFFECEFF8)) },
-            text = {
-                Text(
-                    "A file named \"${target.name}\" already exists. Do you want to overwrite it with current document content?",
-                    color = Color(0xFF94A3B8)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (target.fileRef != null) {
-                            viewModel.saveToFile(target.fileRef)
-                        } else {
-                            val active = currentFolderState
-                            if (active != null) {
-                                val starred = StarredFolder(
-                                    id = "temp",
-                                    name = active.displayName,
-                                    pathDisplay = active.displayPath,
-                                    uriString = active.uriOrPath
-                                )
-                                viewModel.saveToStarredFolder(starred, target.name)
-                            }
-                        }
-                        overwriteTargetFile = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
-                ) {
-                    Text("Overwrite")
+        OverwriteConfirmDialog(
+            fileName = target.name,
+            onConfirm = {
+                if (target.fileRef != null) {
+                    viewModel.saveToFile(target.fileRef)
+                } else {
+                    val active = currentFolderState
+                    if (active != null) {
+                        val starred = StarredFolder(
+                            id = "temp",
+                            name = active.displayName,
+                            pathDisplay = active.displayPath,
+                            uriString = active.uriOrPath
+                        )
+                        viewModel.saveToStarredFolder(starred, target.name)
+                    }
                 }
+                overwriteTargetFile = null
             },
-            dismissButton = {
-                TextButton(onClick = { overwriteTargetFile = null }) {
-                    Text("Cancel", color = Color(0xFF94A3B8))
-                }
-            },
-            containerColor = Color(0xFF1E293B)
+            onDismiss = { overwriteTargetFile = null }
         )
     }
-}
-
-data class CurrentDirectory(
-    val displayName: String,
-    val displayPath: String,
-    val uriOrPath: String,
-    val isTreeUri: Boolean,
-    val parent: CurrentDirectory?
-)
-
-@Composable
-private fun StarredFolderCard(
-    folder: StarredFolder,
-    onOpenFolder: () -> Unit,
-    onFastSave: () -> Unit,
-    onRemove: (() -> Unit)?
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF25334C), RoundedCornerShape(12.dp))
-            .clickable(onClick = onOpenFolder),
-        color = Color(0xFF0F1524)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF1A263D)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Folder,
-                        contentDescription = null,
-                        tint = Color(0xFFFFC700),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            folder.name,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFECEFF8),
-                            fontSize = 14.sp
-                        )
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = "Starred",
-                            tint = Color(0xFFFFD600),
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                    if (folder.pathDisplay.isNotBlank()) {
-                        Text(
-                            folder.pathDisplay,
-                            color = Color(0xFF64748B),
-                            fontSize = 11.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Button(
-                    onClick = onFastSave,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3A8A)),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text(
-                        "Save",
-                        color = Color(0xFF93C5FD),
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                }
-
-                if (onRemove != null) {
-                    IconButton(
-                        onClick = onRemove,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.Star,
-                            contentDescription = "Unstar folder",
-                            tint = Color(0xFFFFD600),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FileOrFolderRow(
-    entry: FileEntry,
-    onFolderClick: () -> Unit,
-    onFileClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(8.dp))
-            .clickable {
-                if (entry.isDirectory) onFolderClick() else onFileClick()
-            },
-        color = if (entry.isDirectory) Color(0xFF0F1524) else Color(0xFF131B2D)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(
-                    if (entry.isDirectory) Icons.Default.Folder else Icons.Default.Description,
-                    contentDescription = null,
-                    tint = if (entry.isDirectory) Color(0xFFFFC700) else Color(0xFF56D0DE),
-                    modifier = Modifier.size(20.dp)
-                )
-
-                Column {
-                    Text(
-                        entry.name,
-                        color = Color(0xFFECEFF8),
-                        fontWeight = if (entry.isDirectory) FontWeight.Bold else FontWeight.Normal,
-                        fontSize = 13.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (entry.sizeString.isNotBlank() || entry.lastModifiedString.isNotBlank()) {
-                        Text(
-                            listOf(entry.sizeString, entry.lastModifiedString).filter { it.isNotBlank() }.joinToString(" • "),
-                            color = Color(0xFF64748B),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-            }
-
-            if (!entry.isDirectory) {
-                Surface(
-                    color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(4.dp)
-                ) {
-                    Text(
-                        "Tap to overwrite",
-                        color = Color(0xFF94A3B8),
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            } else {
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = Color(0xFF64748B),
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-    }
-}
-
-private fun loadEntriesForDirectory(context: Context, directory: CurrentDirectory): List<FileEntry> {
-    val results = mutableListOf<FileEntry>()
-    val dateFormat = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
-
-    if (!directory.isTreeUri) {
-        val dir = File(directory.uriOrPath)
-        if (dir.exists() && dir.isDirectory) {
-            val list = dir.listFiles() ?: arrayOf()
-            // Folders first, then files
-            val sorted = list.sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
-            for (f in sorted) {
-                val sizeStr = if (f.isFile) {
-                    val kb = (f.length() / 1024.0)
-                    if (kb < 1.0) "${f.length()} B" else String.format(Locale.getDefault(), "%.1f KB", kb)
-                } else {
-                    val count = f.list()?.size ?: 0
-                    "$count items"
-                }
-                val dateStr = dateFormat.format(Date(f.lastModified()))
-                results.add(
-                    FileEntry(
-                        name = f.name,
-                        isDirectory = f.isDirectory,
-                        path = f.absolutePath,
-                        sizeString = sizeStr,
-                        lastModifiedString = dateStr,
-                        fileRef = f
-                    )
-                )
-            }
-        }
-    } else {
-        // Query SAF document tree
-        try {
-            val treeUri = Uri.parse(directory.uriOrPath)
-            val docId = DocumentsContract.getTreeDocumentId(treeUri)
-            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
-            val projection = arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_SIZE,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED
-            )
-            context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                val idCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                val nameCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                val mimeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                val modCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
-
-                while (cursor.moveToNext()) {
-                    val id = if (idCol >= 0) cursor.getString(idCol) else ""
-                    val name = if (nameCol >= 0) cursor.getString(nameCol) else "Item"
-                    val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else ""
-                    val isDir = mime == DocumentsContract.Document.MIME_TYPE_DIR
-                    val size = if (sizeCol >= 0) cursor.getLong(sizeCol) else 0L
-                    val mod = if (modCol >= 0) cursor.getLong(modCol) else 0L
-
-                    val sizeStr = if (!isDir) {
-                        val kb = (size / 1024.0)
-                        if (kb < 1.0) "$size B" else String.format(Locale.getDefault(), "%.1f KB", kb)
-                    } else "Folder"
-                    val dateStr = if (mod > 0) dateFormat.format(Date(mod)) else ""
-
-                    results.add(
-                        FileEntry(
-                            name = name,
-                            isDirectory = isDir,
-                            path = id,
-                            sizeString = sizeStr,
-                            lastModifiedString = dateStr,
-                            uriString = directory.uriOrPath
-                        )
-                    )
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-    return results
 }
