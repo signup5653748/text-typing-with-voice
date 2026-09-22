@@ -39,6 +39,7 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
@@ -222,10 +223,10 @@ fun ReadingModeScreen(
     }
 
     var isParagraphModeActive by remember { mutableStateOf(false) }
+    var isSelectParagraphModeActive by remember { mutableStateOf(false) }
     var selectedFunction by remember { mutableStateOf(ReadingFunction.PARAGRAPH) }
     var showFunctionPickerDialog by remember { mutableStateOf(false) }
     var showEditToolsSheet by remember { mutableStateOf(false) }
-    var showParagraphPickerDialog by remember { mutableStateOf(false) }
     var isInsertMode by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
@@ -421,8 +422,25 @@ fun ReadingModeScreen(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .pointerInput(isParagraphModeActive, textValue.text, settings.hideHeadingSymbols, cachedOffsetMap, readingSelection) {
+                        .pointerInput(isParagraphModeActive, isSelectParagraphModeActive, textValue.text, settings.hideHeadingSymbols, cachedOffsetMap, readingSelection) {
                             detectTapGestures(
+                                onDoubleTap = { doubleTapOffset ->
+                                    localLayoutResult?.let { layout ->
+                                        val transOffset = layout.getOffsetForPosition(doubleTapOffset)
+                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                            transOffset,
+                                            cachedOffsetMap
+                                        )
+                                        val paraRange = findParagraphRange(textValue.text, origOffset)
+                                        if (paraRange.length > 0) {
+                                            readingSelection = paraRange
+                                            contextMenuTouchOffset = doubleTapOffset
+                                            contextMenuSelectedRange = paraRange
+                                            showContextMenu = true
+                                            viewModel.ttsWrapper.speakFeedback("Paragraph selected")
+                                        }
+                                    }
+                                },
                                 onTap = { tapOffset ->
                                     // If selection is active, check if tap was near handles so we NEVER clear selection
                                     if (readingSelection.length > 0 && localLayoutResult != null) {
@@ -465,7 +483,17 @@ fun ReadingModeScreen(
                                             cachedOffsetMap
                                         )
 
-                                        if (isParagraphModeActive) {
+                                        if (isSelectParagraphModeActive) {
+                                            val paraRange = findParagraphRange(textValue.text, origOffset)
+                                            if (paraRange.length > 0) {
+                                                readingSelection = paraRange
+                                                contextMenuSelectedRange = paraRange
+                                                contextMenuTouchOffset = tapOffset
+                                                showContextMenu = true
+                                                isSelectParagraphModeActive = false
+                                                viewModel.ttsWrapper.speakFeedback("Paragraph selected")
+                                            }
+                                        } else if (isParagraphModeActive) {
                                             val paraRange = findParagraphRange(textValue.text, origOffset)
                                             viewModel.playFrom(paraRange.start, paraRange.end)
                                         } else {
@@ -1076,7 +1104,8 @@ fun ReadingModeScreen(
                         Surface(
                             onClick = {
                                 showEditToolsSheet = false
-                                showParagraphPickerDialog = true
+                                isSelectParagraphModeActive = true
+                                viewModel.ttsWrapper.speakFeedback("Tap any paragraph to select")
                             },
                             shape = RoundedCornerShape(12.dp),
                             color = Color(0xFF1E283E),
@@ -1101,7 +1130,7 @@ fun ReadingModeScreen(
                                         color = Color(0xFFECEEF2)
                                     )
                                     Text(
-                                        text = "Select any custom paragraph and open all action tools",
+                                        text = "Tap any paragraph directly on screen to select and edit",
                                         fontSize = 12.sp,
                                         color = Color(0xFF8FA7D8)
                                     )
@@ -1112,100 +1141,48 @@ fun ReadingModeScreen(
                 }
             }
 
-            // Select Paragraph Picker Dialog
-            if (showParagraphPickerDialog) {
-                val paragraphs = remember(textValue.text) {
-                    val rawText = textValue.text
-                    val list = mutableListOf<Pair<Int, TextRange>>()
-                    var currentStart = 0
-                    val parts = rawText.split("\n")
-                    var pIndex = 1
-                    for (part in parts) {
-                        val length = part.length
-                        if (part.isNotBlank()) {
-                            list.add(Pair(pIndex++, TextRange(currentStart, currentStart + length)))
-                        }
-                        currentStart += length + 1 // +1 for the newline
-                    }
-                    list
-                }
-
-                AlertDialog(
-                    onDismissRequest = { showParagraphPickerDialog = false },
-                    title = {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            // Floating Indicator banner when Select Paragraph mode is active
+            if (isSelectParagraphModeActive) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 16.dp, start = 16.dp, end = 16.dp)
+                        .wrapContentWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color(0xFF1E283E).copy(alpha = 0.95f),
+                    border = BorderStroke(1.5.dp, Color(0xFFA78BFA)),
+                    shadowElevation = 8.dp
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Segment,
+                            contentDescription = null,
+                            tint = Color(0xFFA78BFA),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Tap any paragraph to select",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFECEEF2)
+                        )
+                        IconButton(
+                            onClick = { isSelectParagraphModeActive = false },
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Segment,
-                                contentDescription = null,
-                                tint = Color(0xFFA78BFA)
-                            )
-                            Text(
-                                text = "Select a Paragraph",
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFFECEEF2)
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Cancel",
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(16.dp)
                             )
                         }
-                    },
-                    text = {
-                        if (paragraphs.isEmpty()) {
-                            Text(
-                                text = "No paragraphs found in document.",
-                                color = Color(0xFF8FA7D8),
-                                fontSize = 14.sp
-                            )
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(280.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(paragraphs) { (num, range) ->
-                                    val previewText = textValue.text.substring(range.min, range.max).trim()
-                                    Surface(
-                                        onClick = {
-                                            showParagraphPickerDialog = false
-                                            readingSelection = range
-                                            contextMenuSelectedRange = range
-                                            showContextMenu = true
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        color = Color(0xFF1E283E),
-                                        border = BorderStroke(1.dp, Color(0xFF2E3A52)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.padding(12.dp)) {
-                                            Text(
-                                                text = "Paragraph $num",
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 13.sp,
-                                                color = Color(0xFF56D0DE)
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Text(
-                                                text = if (previewText.length > 90) previewText.take(90) + "…" else previewText,
-                                                fontSize = 13.sp,
-                                                color = Color(0xFFECEEF2),
-                                                maxLines = 2
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showParagraphPickerDialog = false }) {
-                            Text("Cancel", color = Color(0xFF56D0DE), fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    containerColor = Color(0xFF141A28),
-                    shape = RoundedCornerShape(20.dp)
-                )
+                    }
+                }
             }
 
             // Function Picker Dialog for Long Pressing the Quick Button
