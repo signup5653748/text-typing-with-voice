@@ -43,6 +43,7 @@ data class SettingsEntity(
     // Speech & TTS
     val voiceLanguage: String = "en-US",
     val ttsLanguage: String = "en-US",
+    val ttsVoiceName: String = "",
     val ttsEnginePackage: String = "",
     val ttsSpeed: Float = 1.0f,
     val ttsPitch: Float = 1.0f,
@@ -74,6 +75,7 @@ class SettingsRepository(private val context: Context) {
     private val ALWAYS_INSERT_MIC_DIRECTLY = booleanPreferencesKey("alwaysInsertMicDirectly")
     private val VOICE_LANGUAGE = stringPreferencesKey("voiceLanguage")
     private val TTS_LANGUAGE = stringPreferencesKey("ttsLanguage")
+    private val TTS_VOICE_NAME = stringPreferencesKey("ttsVoiceName")
     private val TTS_ENGINE_PKG = stringPreferencesKey("ttsEnginePackage")
     private val TTS_SPEED = floatPreferencesKey("ttsSpeed")
     private val TTS_PITCH = floatPreferencesKey("ttsPitch")
@@ -152,6 +154,7 @@ class SettingsRepository(private val context: Context) {
             alwaysInsertMicDirectly = prefs[ALWAYS_INSERT_MIC_DIRECTLY] ?: true,
             voiceLanguage = prefs[VOICE_LANGUAGE] ?: "en-US",
             ttsLanguage = prefs[TTS_LANGUAGE] ?: "en-US",
+            ttsVoiceName = prefs[TTS_VOICE_NAME] ?: "",
             ttsEnginePackage = prefs[TTS_ENGINE_PKG] ?: "",
             ttsSpeed = prefs[TTS_SPEED] ?: 1.0f,
             ttsPitch = prefs[TTS_PITCH] ?: 1.0f,
@@ -390,6 +393,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateTtsLanguage(language: String) {
         context.dataStore.edit { prefs -> prefs[TTS_LANGUAGE] = language }
+    }
+
+    suspend fun updateTtsVoiceName(voiceName: String) {
+        context.dataStore.edit { prefs -> prefs[TTS_VOICE_NAME] = voiceName }
     }
 
     suspend fun updateTtsEnginePackage(pkg: String) {

@@ -22,6 +22,15 @@ data class TtsLanguageItem(
     val voiceCount: Int = 1
 )
 
+data class TtsVoiceVariant(
+    val name: String,
+    val displayName: String,
+    val locale: Locale,
+    val isNetworkRequired: Boolean,
+    val quality: Int,
+    val isDownloaded: Boolean
+)
+
 class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
@@ -44,6 +53,7 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
     private val scope = CoroutineScope(Dispatchers.Default)
 
     private var currentLanguageTag: String = "en-US"
+    private var currentVoiceName: String = ""
     private var currentEnginePkg: String? = null
     private var currentRate: Float = 1.0f
     private var currentPitch: Float = 1.0f
@@ -271,6 +281,20 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
         }
     }
 
+    fun setVoice(voiceName: String) {
+        currentVoiceName = voiceName
+        if (isInitialized && voiceName.isNotBlank()) {
+            try {
+                val matchedVoice = tts?.voices?.find { it.name == voiceName }
+                if (matchedVoice != null) {
+                    tts?.voice = matchedVoice
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     private fun applyLanguage(tag: String) {
         try {
             val targetLocale = if (tag.isNotBlank()) Locale.forLanguageTag(tag) else Locale.getDefault()
@@ -285,11 +309,142 @@ class TTSWrapper(context: Context) : TextToSpeech.OnInitListener {
                     }
                 }
             }
+
+            if (currentVoiceName.isNotBlank()) {
+                val matchedVoice = tts?.voices?.find { it.name == currentVoiceName }
+                if (matchedVoice != null) {
+                    tts?.voice = matchedVoice
+                }
+            }
         } catch (e: Exception) {
             try {
                 tts?.setLanguage(Locale.US)
             } catch (_: Exception) {}
         }
+    }
+
+    fun getVoiceVariantsForLanguage(languageTag: String): List<TtsVoiceVariant> {
+        ensureInitialized()
+        val ttsInstance = tts ?: return emptyList()
+        val targetLocale = if (languageTag.isNotBlank()) Locale.forLanguageTag(languageTag) else Locale.getDefault()
+        val targetLang = targetLocale.language
+        val targetCountry = targetLocale.country
+
+        val voices = try { ttsInstance.voices } catch (e: Exception) { null }
+        if (voices.isNullOrEmpty()) {
+            return listOf(
+                TtsVoiceVariant(
+                    name = "default",
+                    displayName = "Default Voice",
+                    locale = targetLocale,
+                    isNetworkRequired = false,
+                    quality = Voice.QUALITY_NORMAL,
+                    isDownloaded = true
+                )
+            )
+        }
+
+        val matched = voices.filter { voice ->
+            val vLoc = voice.locale ?: return@filter false
+            if (!vLoc.language.equals(targetLang, ignoreCase = true)) return@filter false
+            if (targetCountry.isNotBlank() && vLoc.country.isNotBlank()) {
+                vLoc.country.equals(targetCountry, ignoreCase = true)
+            } else true
+        }.ifEmpty {
+            voices.filter { it.locale?.language.equals(targetLang, ignoreCase = true) }
+        }
+
+        if (matched.isEmpty()) {
+            return listOf(
+                TtsVoiceVariant(
+                    name = "default",
+                    displayName = "Default Voice (${targetLocale.displayLanguage})",
+                    locale = targetLocale,
+                    isNetworkRequired = false,
+                    quality = Voice.QUALITY_NORMAL,
+                    isDownloaded = true
+                )
+            )
+        }
+
+        var counter = 1
+        return matched.sortedWith(
+            compareByDescending<Voice> { !it.isNetworkConnectionRequired }
+                .thenBy { it.name }
+        ).map { voice ->
+            val isNotInstalled = voice.features?.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) == true
+            val isNetwork = voice.isNetworkConnectionRequired
+            val isDownloaded = !isNotInstalled && !isNetwork
+
+            val rawName = voice.name
+            val genderLabel = when {
+                rawName.contains("female", ignoreCase = true) || rawName.contains("-f-", ignoreCase = true) || rawName.contains("fem", ignoreCase = true) -> "Female"
+                rawName.contains("male", ignoreCase = true) || rawName.contains("-m-", ignoreCase = true) || rawName.contains("masc", ignoreCase = true) -> "Male"
+                else -> ""
+            }
+            val qualityLabel = when (voice.quality) {
+                Voice.QUALITY_VERY_HIGH -> "Studio HQ"
+                Voice.QUALITY_HIGH -> "High Quality"
+                Voice.QUALITY_NORMAL -> "Standard"
+                else -> ""
+            }
+
+            val descParts = listOfNotNull(
+                genderLabel.ifBlank { null },
+                qualityLabel.ifBlank { null },
+                if (isNetwork) "Online" else "Offline"
+            )
+            val extra = if (descParts.isNotEmpty()) " (${descParts.joinToString(", ")})" else ""
+            val friendlyName = "Voice $counter$extra"
+            counter++
+
+            TtsVoiceVariant(
+                name = voice.name,
+                displayName = friendlyName,
+                locale = voice.locale ?: targetLocale,
+                isNetworkRequired = isNetwork,
+                quality = voice.quality,
+                isDownloaded = isDownloaded
+            )
+        }
+    }
+
+    fun previewVoice(variant: TtsVoiceVariant, previewText: String = "Hello! This is a preview of this voice variant.") {
+        if (tts == null || !isInitialized) {
+            ensureInitialized()
+        }
+        try {
+            if (variant.name != "default") {
+                val matchedVoice = tts?.voices?.find { it.name == variant.name }
+                if (matchedVoice != null) {
+                    tts?.voice = matchedVoice
+                }
+            } else {
+                applyLanguage(variant.locale.toLanguageTag())
+            }
+            val params = Bundle().apply {
+                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+            }
+            tts?.speak(previewText, TextToSpeech.QUEUE_FLUSH, params, "PREVIEW_${System.currentTimeMillis()}")
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun openTtsInstallSettings(context: Context): Boolean {
+        val intents = listOf(
+            android.content.Intent("com.android.settings.TTS_SETTINGS"),
+            android.content.Intent("android.speech.tts.engine.INSTALL_TTS_DATA"),
+            android.content.Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                return true
+            } catch (_: Exception) {}
+        }
+        return false
     }
 
     fun setEngine(enginePkg: String) {

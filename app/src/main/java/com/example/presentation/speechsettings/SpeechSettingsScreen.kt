@@ -4,10 +4,15 @@ import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -20,6 +25,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.core.editor.dialogs.SpeechDownloadHelpCard
+import com.example.core.editor.dialogs.TtsDownloadHelpCard
+import com.example.core.editor.dialogs.VoiceVariantRow
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,7 +43,7 @@ fun SpeechSettingsScreen(
         containerColor = Color(0xFF0C0D10),
         topBar = {
             TopAppBar(
-                title = { Text("Speech", fontWeight = FontWeight.SemiBold, color = Color(0xFFECEFF8)) },
+                title = { Text("Speech & Voice Settings", fontWeight = FontWeight.SemiBold, color = Color(0xFFECEFF8)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color(0xFF8FA7D8))
@@ -46,7 +54,10 @@ fun SpeechSettingsScreen(
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             if (uiState.ttsEngines.isNotEmpty()) {
@@ -64,15 +75,28 @@ fun SpeechSettingsScreen(
                     ttsLanguages = uiState.ttsLanguages,
                     ttsLocales = uiState.ttsLocales,
                     selectedTtsLanguage = settings.ttsLanguage,
-                    onLanguageSelected = { viewModel.updateTtsLanguage(it) }
+                    onLanguageSelected = { viewModel.updateTtsLanguage(it) },
+                    onOpenTtsSettings = { viewModel.openTtsInstallSettings() }
                 )
+            }
+
+            if (uiState.ttsVoiceVariants.isNotEmpty()) {
+                item(key = "tts_voice_variants_card") {
+                    TtsVoiceVariantsCard(
+                        variants = uiState.ttsVoiceVariants,
+                        selectedVoiceName = settings.ttsVoiceName,
+                        onVariantSelected = { viewModel.updateTtsVoiceVariant(it) },
+                        onPreview = { viewModel.previewVoiceVariant(it) }
+                    )
+                }
             }
 
             item(key = "voice_typing_language_card") {
                 VoiceTypingLanguageCard(
                     speechLanguages = uiState.speechLanguages,
                     selectedVoiceLanguage = settings.voiceLanguage,
-                    onLanguageSelected = { viewModel.setLanguage(it) }
+                    onLanguageSelected = { viewModel.setLanguage(it) },
+                    onOpenDownloadSettings = { viewModel.openVoiceDownloadSettings() }
                 )
             }
         }
@@ -128,7 +152,8 @@ private fun TtsLanguageCard(
     ttsLanguages: List<com.example.speech.TtsLanguageItem>,
     ttsLocales: List<Locale>,
     selectedTtsLanguage: String,
-    onLanguageSelected: (String) -> Unit
+    onLanguageSelected: (String) -> Unit,
+    onOpenTtsSettings: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
@@ -136,8 +161,16 @@ private fun TtsLanguageCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Text-to-Speech Language", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
-            Text("Voice language used when reading document text aloud (Downloaded voices detected)", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Step 1: Pick TTS Language", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
+                    Text("Choose language to read aloud", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+                }
+            }
 
             val availableVoiceItems = remember(ttsLanguages, ttsLocales) {
                 if (ttsLanguages.isNotEmpty()) {
@@ -158,7 +191,12 @@ private fun TtsLanguageCard(
             if (availableVoiceItems.isEmpty()) {
                 Text("No TTS languages found on system", color = Color(0xFF64748B), fontSize = 13.sp)
             } else {
-                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     availableVoiceItems.forEach { (tag, labelName, isDownloaded) ->
                         val isSelected = selectedTtsLanguage == tag || (selectedTtsLanguage.isEmpty() && tag.startsWith("en", ignoreCase = true))
                         FilterChip(
@@ -180,6 +218,39 @@ private fun TtsLanguageCard(
                     }
                 }
             }
+
+            TtsDownloadHelpCard(onOpenTtsSettings = onOpenTtsSettings)
+        }
+    }
+}
+
+@Composable
+private fun TtsVoiceVariantsCard(
+    variants: List<com.example.speech.TtsVoiceVariant>,
+    selectedVoiceName: String,
+    onVariantSelected: (String) -> Unit,
+    onPreview: (com.example.speech.TtsVoiceVariant) -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Step 2: Choose Voice Variant", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
+            Text("Select pitch, gender & timbre (tap speaker icon to preview audio)", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                variants.forEach { variant ->
+                    val isSelected = selectedVoiceName == variant.name || (selectedVoiceName.isEmpty() && variants.firstOrNull() == variant)
+                    VoiceVariantRow(
+                        variant = variant,
+                        isSelected = isSelected,
+                        onSelect = { onVariantSelected(variant.name) },
+                        onPreview = { onPreview(variant) }
+                    )
+                }
+            }
         }
     }
 }
@@ -188,7 +259,8 @@ private fun TtsLanguageCard(
 private fun VoiceTypingLanguageCard(
     speechLanguages: List<com.example.speech.SpeechRecognitionWrapper.LanguagePack>,
     selectedVoiceLanguage: String,
-    onLanguageSelected: (String) -> Unit
+    onLanguageSelected: (String) -> Unit,
+    onOpenDownloadSettings: () -> Unit
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color(0xFF161E30)),
@@ -197,19 +269,38 @@ private fun VoiceTypingLanguageCard(
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Voice Typing Recognition Language", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
-            Text("Actual installed/downloaded offline recognition languages", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+            Text("Select active voice dictation language", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+
+            SpeechDownloadHelpCard(onOpenSettings = onOpenDownloadSettings)
 
             if (speechLanguages.isEmpty()) {
-                Text("No downloaded offline voice packs detected", color = Color(0xFF64748B), fontSize = 13.sp)
+                Text("No voice languages detected", color = Color(0xFF64748B), fontSize = 13.sp)
             } else {
-                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("All Available Languages:", style = MaterialTheme.typography.bodySmall, color = Color(0xFF94A3B8))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     speechLanguages.forEach { lang ->
-                        val isSelected = selectedVoiceLanguage == lang.languageCode
+                        val isSelected = selectedVoiceLanguage.equals(lang.languageCode, ignoreCase = true) ||
+                                (selectedVoiceLanguage.startsWith(lang.languageCode, ignoreCase = true))
                         FilterChip(
                             selected = isSelected,
                             onClick = { onLanguageSelected(lang.languageCode) },
-                            label = { Text(lang.displayName, fontSize = 12.5.sp) },
-                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFF059669), selectedLabelColor = Color.White, containerColor = Color(0xFF20293D), labelColor = Color(0xFFECEFF8))
+                            label = {
+                                Text(
+                                    if (lang.isOfflineAvailable) "${lang.displayName} (Offline)" else lang.displayName,
+                                    fontSize = 12.5.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF059669),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color(0xFF20293D),
+                                labelColor = Color(0xFFECEFF8)
+                            )
                         )
                     }
                 }

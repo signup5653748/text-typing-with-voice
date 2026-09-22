@@ -170,6 +170,9 @@ open class EditorViewModel(
                 if (s.ttsLanguage.isNotBlank()) {
                     ttsWrapper.setLanguage(s.ttsLanguage)
                 }
+                if (s.ttsVoiceName.isNotBlank()) {
+                    ttsWrapper.setVoice(s.ttsVoiceName)
+                }
                 if (s.ttsEnginePackage.isNotBlank()) {
                     ttsWrapper.setEngine(s.ttsEnginePackage)
                 }
@@ -958,8 +961,45 @@ open class EditorViewModel(
         viewModelScope.launch {
             settingsRepo.updateTtsLanguage(langCode)
             ttsWrapper.setLanguage(langCode)
+            val variants = ttsWrapper.getVoiceVariantsForLanguage(langCode)
+            if (variants.isNotEmpty() && variants.none { it.name == settings.value.ttsVoiceName }) {
+                val first = variants.firstOrNull { it.isDownloaded } ?: variants.first()
+                settingsRepo.updateTtsVoiceName(first.name)
+                ttsWrapper.setVoice(first.name)
+            }
             ttsWrapper.speakFeedback("TTS set to $langCode")
         }
+    }
+
+    fun updateVoiceLanguageOnly(langCode: String) {
+        viewModelScope.launch {
+            settingsRepo.updateVoiceLanguage(langCode)
+            ttsWrapper.speakFeedback("Voice typing set to $langCode")
+        }
+    }
+
+    fun updateTtsVoiceVariant(voiceName: String) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsVoiceName(voiceName)
+            ttsWrapper.setVoice(voiceName)
+            ttsWrapper.speakFeedback("Voice variant selected")
+        }
+    }
+
+    fun previewVoiceVariant(variant: com.example.speech.TtsVoiceVariant) {
+        ttsWrapper.previewVoice(variant)
+    }
+
+    fun getVoiceVariantsForLanguage(langCode: String): List<com.example.speech.TtsVoiceVariant> {
+        return ttsWrapper.getVoiceVariantsForLanguage(langCode)
+    }
+
+    fun openVoiceDownloadSettings(context: android.content.Context) {
+        speechWrapper.openVoiceDownloadSettings(context)
+    }
+
+    fun openTtsInstallSettings(context: android.content.Context) {
+        ttsWrapper.openTtsInstallSettings(context)
     }
 
     fun updateTtsEngine(enginePkg: String) {

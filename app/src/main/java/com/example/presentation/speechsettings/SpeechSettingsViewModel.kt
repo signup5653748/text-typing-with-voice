@@ -29,7 +29,11 @@ class SpeechSettingsViewModel(
     init {
         viewModelScope.launch {
             settingsRepo.settingsFlow.collect { settings ->
+                val previousLang = _uiState.value.settings.ttsLanguage
                 _uiState.value = _uiState.value.copy(settings = settings)
+                if (settings.ttsLanguage != previousLang || _uiState.value.ttsVoiceVariants.isEmpty()) {
+                    loadVoiceVariants(settings.ttsLanguage)
+                }
             }
         }
         viewModelScope.launch {
@@ -45,21 +49,28 @@ class SpeechSettingsViewModel(
         loadSpeechData()
     }
 
-    private fun loadSpeechData() {
+    fun loadSpeechData() {
         speechWrapper.getSupportedLanguages { packs ->
             _uiState.value = _uiState.value.copy(speechLanguages = packs)
         }
         viewModelScope.launch(Dispatchers.IO) {
             val engines = ttsWrapper.getAvailableEngines()
             val ttsLangs = ttsWrapper.queryDownloadedTtsLanguages()
+            val variants = ttsWrapper.getVoiceVariantsForLanguage(_uiState.value.settings.ttsLanguage)
             withContext(Dispatchers.Main) {
                 _uiState.value = _uiState.value.copy(
                     ttsEngines = engines,
                     ttsLanguages = ttsLangs,
-                    ttsLocales = ttsLangs.map { it.locale }
+                    ttsLocales = ttsLangs.map { it.locale },
+                    ttsVoiceVariants = variants
                 )
             }
         }
+    }
+
+    private fun loadVoiceVariants(langCode: String) {
+        val variants = ttsWrapper.getVoiceVariantsForLanguage(langCode)
+        _uiState.value = _uiState.value.copy(ttsVoiceVariants = variants)
     }
 
     fun updateTtsEngine(enginePkg: String) {
@@ -74,16 +85,42 @@ class SpeechSettingsViewModel(
         viewModelScope.launch {
             settingsRepo.updateTtsLanguage(langCode)
             ttsWrapper.setLanguage(langCode)
+            val variants = ttsWrapper.getVoiceVariantsForLanguage(langCode)
+            _uiState.value = _uiState.value.copy(ttsVoiceVariants = variants)
+            // If previous voice doesn't match new language, pick first available or clear
+            if (variants.isNotEmpty() && variants.none { it.name == _uiState.value.settings.ttsVoiceName }) {
+                val firstVariant = variants.firstOrNull { it.isDownloaded } ?: variants.first()
+                settingsRepo.updateTtsVoiceName(firstVariant.name)
+                ttsWrapper.setVoice(firstVariant.name)
+            }
             ttsWrapper.speakFeedback("TTS language updated")
         }
+    }
+
+    fun updateTtsVoiceVariant(voiceName: String) {
+        viewModelScope.launch {
+            settingsRepo.updateTtsVoiceName(voiceName)
+            ttsWrapper.setVoice(voiceName)
+            ttsWrapper.speakFeedback("Voice variant selected")
+        }
+    }
+
+    fun previewVoiceVariant(variant: com.example.speech.TtsVoiceVariant) {
+        ttsWrapper.previewVoice(variant)
     }
 
     fun setLanguage(langCode: String) {
         viewModelScope.launch {
             settingsRepo.updateVoiceLanguage(langCode)
-            settingsRepo.updateTtsLanguage(langCode)
-            ttsWrapper.setLanguage(langCode)
-            ttsWrapper.speakFeedback("Voice language updated")
+            ttsWrapper.speakFeedback("Voice typing language set to $langCode")
         }
+    }
+
+    fun openVoiceDownloadSettings() {
+        speechWrapper.openVoiceDownloadSettings(getApplication())
+    }
+
+    fun openTtsInstallSettings() {
+        ttsWrapper.openTtsInstallSettings(getApplication())
     }
 }

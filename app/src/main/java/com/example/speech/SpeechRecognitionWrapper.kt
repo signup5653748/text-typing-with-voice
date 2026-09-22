@@ -100,9 +100,73 @@ class SpeechRecognitionWrapper(private val context: Context) {
         _error.value = null
     }
 
+    companion object {
+        val ALL_SPEECH_LANGUAGES = listOf(
+            "en-US" to "English (United States)",
+            "en-GB" to "English (United Kingdom)",
+            "en-IN" to "English (India)",
+            "en-AU" to "English (Australia)",
+            "en-CA" to "English (Canada)",
+            "en-NZ" to "English (New Zealand)",
+            "en-ZA" to "English (South Africa)",
+            "en-IE" to "English (Ireland)",
+            "en-SG" to "English (Singapore)",
+            "hi-IN" to "Hindi (India)",
+            "es-ES" to "Spanish (Spain)",
+            "es-US" to "Spanish (United States)",
+            "es-MX" to "Spanish (Mexico)",
+            "es-AR" to "Spanish (Argentina)",
+            "es-CO" to "Spanish (Colombia)",
+            "fr-FR" to "French (France)",
+            "fr-CA" to "French (Canada)",
+            "fr-BE" to "French (Belgium)",
+            "de-DE" to "German (Germany)",
+            "de-AT" to "German (Austria)",
+            "de-CH" to "German (Switzerland)",
+            "it-IT" to "Italian (Italy)",
+            "pt-BR" to "Portuguese (Brazil)",
+            "pt-PT" to "Portuguese (Portugal)",
+            "ru-RU" to "Russian (Russia)",
+            "ja-JP" to "Japanese (Japan)",
+            "ko-KR" to "Korean (South Korea)",
+            "zh-CN" to "Chinese (Simplified, China)",
+            "zh-TW" to "Chinese (Traditional, Taiwan)",
+            "zh-HK" to "Chinese (Cantonese, Hong Kong)",
+            "ar-SA" to "Arabic (Saudi Arabia)",
+            "ar-AE" to "Arabic (UAE)",
+            "ar-EG" to "Arabic (Egypt)",
+            "tr-TR" to "Turkish (Turkey)",
+            "nl-NL" to "Dutch (Netherlands)",
+            "pl-PL" to "Polish (Poland)",
+            "sv-SE" to "Swedish (Sweden)",
+            "id-ID" to "Indonesian (Indonesia)",
+            "th-TH" to "Thai (Thailand)",
+            "vi-VN" to "Vietnamese (Vietnam)",
+            "bn-IN" to "Bengali (India)",
+            "ta-IN" to "Tamil (India)",
+            "te-IN" to "Telugu (India)",
+            "mr-IN" to "Marathi (India)",
+            "gu-IN" to "Gujarati (India)",
+            "kn-IN" to "Kannada (India)",
+            "ml-IN" to "Malayalam (India)",
+            "pa-IN" to "Punjabi (India)",
+            "ur-IN" to "Urdu (India)",
+            "ur-PK" to "Urdu (Pakistan)",
+            "uk-UA" to "Ukrainian (Ukraine)",
+            "el-GR" to "Greek (Greece)",
+            "cs-CZ" to "Czech (Czech Republic)",
+            "ro-RO" to "Romanian (Romania)",
+            "hu-HU" to "Hungarian (Hungary)",
+            "he-IL" to "Hebrew (Israel)",
+            "fa-IR" to "Persian (Iran)",
+            "ms-MY" to "Malay (Malaysia)",
+            "fil-PH" to "Filipino (Philippines)"
+        )
+    }
+
     /**
-     * Queries the actual installed/downloaded offline voice recognition languages on the device.
-     * No hardcoded/predefined lists.
+     * Queries both installed/downloaded offline voice recognition languages on the device
+     * and full supported world language list so user can use any language.
      */
     fun getSupportedLanguages(callback: (List<LanguagePack>) -> Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -118,28 +182,11 @@ class SpeechRecognitionWrapper(private val context: Context) {
                         override fun onSupportResult(recognitionSupport: android.speech.RecognitionSupport) {
                             val installedOnDevice = recognitionSupport.installedOnDeviceLanguages
                             val supportedOnDevice = recognitionSupport.supportedOnDeviceLanguages
+                            val downloadedSet = (installedOnDevice + supportedOnDevice).filter { it.isNotBlank() }.toSet()
 
-                            // Gather genuine downloaded/on-device languages
-                            val downloadedTags = (installedOnDevice + supportedOnDevice).filter { it.isNotBlank() }.distinct()
-
-                            if (downloadedTags.isNotEmpty()) {
-                                val list = downloadedTags.map { tag ->
-                                    LanguagePack(
-                                        displayName = formatDisplayName(tag),
-                                        languageCode = tag,
-                                        isOfflineAvailable = true
-                                    )
-                                }.sortedBy { it.displayName }
-                                callback(list)
-                                recognizer.destroy()
-                                return
-                            }
-
-                            // If checkRecognitionSupport returns empty, query the speech engine broadcast receiver
-                            queryInstalledLanguagesViaReceiver(context) { receiverLangs ->
-                                callback(receiverLangs)
-                                recognizer.destroy()
-                            }
+                            val combinedList = buildCompleteLanguageList(downloadedSet)
+                            callback(combinedList)
+                            recognizer.destroy()
                         }
 
                         override fun onError(error: Int) {
@@ -169,32 +216,10 @@ class SpeechRecognitionWrapper(private val context: Context) {
                 object : BroadcastReceiver() {
                     override fun onReceive(context: Context?, intent: Intent?) {
                         val results = getResultExtras(true)
-                        val supportedLangs = results?.getStringArrayList(RecognizerIntent.EXTRA_SUPPORTED_LANGUAGES)
-
-                        if (!supportedLangs.isNullOrEmpty()) {
-                            val list = supportedLangs.filter { it.isNotBlank() }.distinct().map { tag ->
-                                LanguagePack(
-                                    displayName = formatDisplayName(tag),
-                                    languageCode = tag,
-                                    isOfflineAvailable = true
-                                )
-                            }.sortedBy { it.displayName }
-                            callback(list)
-                        } else {
-                            // If broadcast returned no list, fallback to currently active device Locale only
-                            val systemDefault = Locale.getDefault()
-                            val tag = systemDefault.toLanguageTag().ifBlank {
-                                "${systemDefault.language}-${systemDefault.country}".trimEnd('-')
-                            }
-                            val singleList = listOf(
-                                LanguagePack(
-                                    displayName = systemDefault.getDisplayName(systemDefault).replaceFirstChar { it.uppercase() },
-                                    languageCode = tag,
-                                    isOfflineAvailable = true
-                                )
-                            )
-                            callback(singleList)
-                        }
+                        val supportedLangs = results?.getStringArrayList(RecognizerIntent.EXTRA_SUPPORTED_LANGUAGES) ?: emptyList<String>()
+                        val downloadedSet = supportedLangs.filter { it.isNotBlank() }.toSet()
+                        val list = buildCompleteLanguageList(downloadedSet)
+                        callback(list)
                     }
                 },
                 null,
@@ -203,20 +228,56 @@ class SpeechRecognitionWrapper(private val context: Context) {
                 null
             )
         } catch (e: Exception) {
-            val systemDefault = Locale.getDefault()
-            val tag = systemDefault.toLanguageTag().ifBlank {
-                "${systemDefault.language}-${systemDefault.country}".trimEnd('-')
-            }
-            callback(
-                listOf(
-                    LanguagePack(
-                        displayName = systemDefault.getDisplayName(systemDefault).replaceFirstChar { it.uppercase() },
-                        languageCode = tag,
-                        isOfflineAvailable = true
-                    )
-                )
+            callback(buildCompleteLanguageList(emptySet()))
+        }
+    }
+
+    private fun buildCompleteLanguageList(downloadedTags: Set<String>): List<LanguagePack> {
+        val result = linkedMapOf<String, LanguagePack>()
+
+        // 1. First add downloaded/on-device tags
+        downloadedTags.forEach { tag ->
+            result[tag] = LanguagePack(
+                displayName = formatDisplayName(tag),
+                languageCode = tag,
+                isOfflineAvailable = true
             )
         }
+
+        // 2. Add full catalog of world languages
+        ALL_SPEECH_LANGUAGES.forEach { (tag, label) ->
+            if (!result.containsKey(tag)) {
+                val isDownloaded = downloadedTags.contains(tag) || downloadedTags.any { it.startsWith(tag, ignoreCase = true) }
+                result[tag] = LanguagePack(
+                    displayName = label,
+                    languageCode = tag,
+                    isOfflineAvailable = isDownloaded
+                )
+            }
+        }
+
+        return result.values.sortedWith(
+            compareByDescending<LanguagePack> { it.isOfflineAvailable }
+                .thenBy { it.displayName }
+        )
+    }
+
+    fun openVoiceDownloadSettings(ctx: Context): Boolean {
+        val intents = listOf(
+            Intent("com.google.android.voicesearch.intent.action.DOWNLOAD_VOICE_PACK"),
+            Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent("android.speech.action.VOICE_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_LOCALE_SETTINGS),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(intent)
+                return true
+            } catch (_: Exception) {}
+        }
+        return false
     }
 
     private fun formatDisplayName(languageTag: String): String {
