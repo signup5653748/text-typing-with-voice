@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.core.editor.dialogs.AdditionalLanguagesHeader
 import com.example.core.editor.dialogs.LanguageEmptyBox
 import com.example.core.editor.dialogs.LanguageItemRow
 import com.example.core.editor.dialogs.LanguageLoadingBox
@@ -42,6 +43,8 @@ fun LanguagePickerSheet(viewModel: EditorViewModel) {
     var speechLanguages by remember { mutableStateOf<List<SpeechRecognitionWrapper.LanguagePack>?>(null) }
     var ttsLanguages by remember { mutableStateOf<List<TtsLanguageItem>?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+    var isAdditionalTtsExpanded by remember { mutableStateOf(false) }
+    var isAdditionalSpeechExpanded by remember { mutableStateOf(false) }
 
     // Two-step TTS selection: when non-null, showing voice variants for this language
     var selectedTtsForVariants by remember { mutableStateOf<TtsLanguageItem?>(null) }
@@ -275,25 +278,72 @@ fun LanguagePickerSheet(viewModel: EditorViewModel) {
                         if (filteredList.isEmpty()) {
                             LanguageEmptyBox(message = "No matching TTS languages found.")
                         } else {
+                            val downloadedList = filteredList.filter { it.isDownloaded }
+                            val additionalList = filteredList.filter { !it.isDownloaded }
+
                             LazyColumn(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .heightIn(max = 380.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                items(filteredList) { item ->
-                                    val isSelected = settings.ttsLanguage.equals(item.languageTag, ignoreCase = true) ||
-                                            (settings.ttsLanguage.startsWith(item.languageTag, ignoreCase = true))
+                                // 1. Downloaded Languages First
+                                if (downloadedList.isNotEmpty()) {
+                                    item {
+                                        Text(
+                                            "Downloaded Languages",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF34D399),
+                                            modifier = Modifier.padding(vertical = 4.dp)
+                                        )
+                                    }
+                                    items(downloadedList) { item ->
+                                        val isSelected = settings.ttsLanguage.equals(item.languageTag, ignoreCase = true) ||
+                                                (settings.ttsLanguage.startsWith(item.languageTag, ignoreCase = true))
 
-                                    TtsLanguageItemRow(
-                                        item = item,
-                                        isSelected = isSelected,
-                                        onSelect = {
-                                            viewModel.updateTtsLanguage(item.languageTag)
-                                            // Open voice variant list for this language
-                                            selectedTtsForVariants = item
+                                        TtsLanguageItemRow(
+                                            item = item,
+                                            isSelected = isSelected,
+                                            onSelect = {
+                                                viewModel.updateTtsLanguage(item.languageTag)
+                                                selectedTtsForVariants = item
+                                            }
+                                        )
+                                    }
+                                }
+
+                                // 2. Additional Languages Dropdown
+                                if (additionalList.isNotEmpty()) {
+                                    item {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        AdditionalLanguagesHeader(
+                                            count = additionalList.size,
+                                            isExpanded = isAdditionalTtsExpanded || searchQuery.isNotBlank(),
+                                            onToggle = { isAdditionalTtsExpanded = !isAdditionalTtsExpanded },
+                                            title = "Additional Languages",
+                                            subtitle = "Download voice data or pick language"
+                                        )
+                                    }
+
+                                    if (isAdditionalTtsExpanded || searchQuery.isNotBlank()) {
+                                        items(additionalList) { item ->
+                                            val isSelected = settings.ttsLanguage.equals(item.languageTag, ignoreCase = true) ||
+                                                    (settings.ttsLanguage.startsWith(item.languageTag, ignoreCase = true))
+
+                                            TtsLanguageItemRow(
+                                                item = item,
+                                                isSelected = isSelected,
+                                                onSelect = {
+                                                    viewModel.updateTtsLanguage(item.languageTag)
+                                                    selectedTtsForVariants = item
+                                                },
+                                                onDownloadVoice = {
+                                                    viewModel.openTtsInstallSettings(context)
+                                                }
+                                            )
                                         }
-                                    )
+                                    }
                                 }
 
                                 item {
@@ -326,6 +376,9 @@ fun LanguagePickerSheet(viewModel: EditorViewModel) {
                     if (filteredSpeech.isEmpty()) {
                         LanguageEmptyBox(message = "No matching voice typing languages found.")
                     } else {
+                        val downloadedSpeech = filteredSpeech.filter { it.isOfflineAvailable }
+                        val additionalSpeech = filteredSpeech.filter { !it.isOfflineAvailable }
+
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -341,18 +394,63 @@ fun LanguagePickerSheet(viewModel: EditorViewModel) {
                                 Spacer(modifier = Modifier.height(4.dp))
                             }
 
-                            items(filteredSpeech) { lang ->
-                                val isSelected = settings.voiceLanguage.equals(lang.languageCode, ignoreCase = true) ||
-                                        (settings.voiceLanguage.startsWith(lang.languageCode, ignoreCase = true))
+                            // 1. Downloaded Speech Languages First
+                            if (downloadedSpeech.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        "Downloaded Languages",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF34D399),
+                                        modifier = Modifier.padding(vertical = 4.dp)
+                                    )
+                                }
+                                items(downloadedSpeech) { lang ->
+                                    val isSelected = settings.voiceLanguage.equals(lang.languageCode, ignoreCase = true) ||
+                                            (settings.voiceLanguage.startsWith(lang.languageCode, ignoreCase = true))
 
-                                LanguageItemRow(
-                                    lang = lang,
-                                    isSelected = isSelected,
-                                    onSelect = {
-                                        viewModel.setLanguage(lang.languageCode)
-                                        viewModel.closeLanguagePicker()
+                                    LanguageItemRow(
+                                        lang = lang,
+                                        isSelected = isSelected,
+                                        onSelect = {
+                                            viewModel.setLanguage(lang.languageCode)
+                                            viewModel.closeLanguagePicker()
+                                        }
+                                    )
+                                }
+                            }
+
+                            // 2. Additional Languages Dropdown
+                            if (additionalSpeech.isNotEmpty()) {
+                                item {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    AdditionalLanguagesHeader(
+                                        count = additionalSpeech.size,
+                                        isExpanded = isAdditionalSpeechExpanded || searchQuery.isNotBlank(),
+                                        onToggle = { isAdditionalSpeechExpanded = !isAdditionalSpeechExpanded },
+                                        title = "Additional Languages",
+                                        subtitle = "Download offline dictionary or pick language"
+                                    )
+                                }
+
+                                if (isAdditionalSpeechExpanded || searchQuery.isNotBlank()) {
+                                    items(additionalSpeech) { lang ->
+                                        val isSelected = settings.voiceLanguage.equals(lang.languageCode, ignoreCase = true) ||
+                                                (settings.voiceLanguage.startsWith(lang.languageCode, ignoreCase = true))
+
+                                        LanguageItemRow(
+                                            lang = lang,
+                                            isSelected = isSelected,
+                                            onSelect = {
+                                                viewModel.setLanguage(lang.languageCode)
+                                                viewModel.closeLanguagePicker()
+                                            },
+                                            onDownloadDictionary = {
+                                                viewModel.downloadSpeechDictionary(lang.languageCode, context)
+                                            }
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }

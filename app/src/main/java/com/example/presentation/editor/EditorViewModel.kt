@@ -380,10 +380,14 @@ open class EditorViewModel(
                 val current = _textValue.value
                 val hasSelection = current.selection.start != current.selection.end
                 val clipboardText = if (action == ActionButton.PASTE) pasteFromClipboard() else null
+                val transient = _transientHighlightRange.value
+                val isWord = !_kActive.value
 
                 val result = TextActionLogic.handleAction(
                     action = action,
                     currentValue = current,
+                    transientRange = transient,
+                    isWordMode = isWord,
                     clipboardText = clipboardText,
                     onCopy = { copyToClipboard(it) }
                 )
@@ -391,11 +395,12 @@ open class EditorViewModel(
                     recordSnapshot(current)
                 }
                 _textValue.value = result
+                _transientHighlightRange.value = null
                 persistDraft()
 
                 when (action) {
-                    ActionButton.CUT -> speakButtonFeedback("CUT", if (hasSelection) "Cut" else "Nothing selected to cut")
-                    ActionButton.COPY -> speakButtonFeedback("COPY", if (hasSelection) "Copied" else "Nothing selected to copy")
+                    ActionButton.CUT -> speakButtonFeedback("CUT", if (hasSelection || transient != null) "Cut" else "Nothing selected to cut")
+                    ActionButton.COPY -> speakButtonFeedback("COPY", if (hasSelection || transient != null) "Copied" else "Nothing selected to copy")
                     ActionButton.DELETE -> speakButtonFeedback("DELETE", "Deleted")
                     ActionButton.PASTE -> speakButtonFeedback("PASTE", if (!clipboardText.isNullOrEmpty()) "Pasted" else "Clipboard is empty")
                     ActionButton.ENTER -> speakButtonFeedback("ENTER", "Enter")
@@ -996,6 +1001,10 @@ open class EditorViewModel(
 
     fun openVoiceDownloadSettings(context: android.content.Context) {
         speechWrapper.openVoiceDownloadSettings(context)
+    }
+
+    fun downloadSpeechDictionary(langCode: String, context: android.content.Context) {
+        speechWrapper.downloadSpeechDictionary(langCode, context)
     }
 
     fun openTtsInstallSettings(context: android.content.Context) {

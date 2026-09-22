@@ -265,6 +265,30 @@ class SpeechRecognitionWrapper(private val context: Context) {
         )
     }
 
+    fun downloadSpeechDictionary(languageCode: String, ctx: Context): Boolean {
+        val intents = listOf(
+            Intent("com.google.android.voicesearch.intent.action.DOWNLOAD_VOICE_PACK").apply {
+                putExtra("extra_language", languageCode)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
+            },
+            Intent("com.samsung.android.settings.INPUT_LANGUAGE_SETTINGS"),
+            Intent("android.settings.VOICE_INPUT_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS),
+            Intent(RecognizerIntent.ACTION_GET_LANGUAGE_DETAILS),
+            Intent("android.speech.action.VOICE_SETTINGS"),
+            Intent(android.provider.Settings.ACTION_SETTINGS)
+        )
+        for (intent in intents) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                ctx.startActivity(intent)
+                return true
+            } catch (_: Exception) {}
+        }
+        return false
+    }
+
     fun openVoiceDownloadSettings(ctx: Context): Boolean {
         val intents = listOf(
             Intent("com.samsung.android.settings.INPUT_LANGUAGE_SETTINGS"),
