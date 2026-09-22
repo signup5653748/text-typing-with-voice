@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -48,7 +51,9 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Segment
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Spellcheck
@@ -65,6 +70,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -72,6 +78,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -217,6 +224,9 @@ fun ReadingModeScreen(
     var isParagraphModeActive by remember { mutableStateOf(false) }
     var selectedFunction by remember { mutableStateOf(ReadingFunction.PARAGRAPH) }
     var showFunctionPickerDialog by remember { mutableStateOf(false) }
+    var showEditToolsSheet by remember { mutableStateOf(false) }
+    var showParagraphPickerDialog by remember { mutableStateOf(false) }
+    var isInsertMode by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
     var showColorPickerDialog by remember { mutableStateOf(false) }
@@ -298,7 +308,7 @@ fun ReadingModeScreen(
                     }
                 },
                 actions = {
-                    // Three-dot menu containing all options
+                    // Three-dot menu containing only Text size and Highlight color
                     Box {
                         IconButton(
                             onClick = { menuExpanded = !menuExpanded },
@@ -318,31 +328,6 @@ fun ReadingModeScreen(
                             },
                             modifier = Modifier.background(Color(0xFF161E30))
                         ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Copy all text",
-                                        color = Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy all text",
-                                        tint = Color(0xFF56D0DE)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("text", textValue.text)
-                                    clipboard.setPrimaryClip(clip)
-                                    viewModel.ttsWrapper.speakFeedback("Entire text copied")
-                                }
-                            )
-
-                            HorizontalDivider(color = Color(0xFF26344E))
-
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -380,94 +365,6 @@ fun ReadingModeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     showColorPickerDialog = true
-                                }
-                            )
-
-                            HorizontalDivider(color = Color(0xFF26344E))
-
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Undo",
-                                        color = if (canUndo) Color(0xFFECEEF2) else Color(0xFF4A5568)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Undo,
-                                        contentDescription = "Undo",
-                                        tint = if (canUndo) Color(0xFF56D0DE) else Color(0xFF4A5568)
-                                    )
-                                },
-                                enabled = canUndo,
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.undo()
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Redo",
-                                        color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF4A5568)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.Redo,
-                                        contentDescription = "Redo",
-                                        tint = if (canRedo) Color(0xFF56D0DE) else Color(0xFF4A5568)
-                                    )
-                                },
-                                enabled = canRedo,
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.redo()
-                                }
-                            )
-
-                            HorizontalDivider(color = Color(0xFF26344E))
-
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Select all",
-                                        color = Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.SelectAll,
-                                        contentDescription = "Select all",
-                                        tint = Color(0xFF56D0DE)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    val allRange = TextRange(0, textValue.text.length)
-                                    readingSelection = allRange
-                                    contextMenuSelectedRange = allRange
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Add new line",
-                                        color = Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardReturn,
-                                        contentDescription = "Add new line",
-                                        tint = Color(0xFF32D796)
-                                    )
-                                },
-                                onClick = {
-                                    menuExpanded = false
-                                    viewModel.addNewLine()
                                 }
                             )
                         }
@@ -520,7 +417,7 @@ fun ReadingModeScreen(
                     )
                 }
 
-                // Transparent overlay to reliably capture taps and long-presses over the text
+                // Transparent overlay to reliably capture taps, long-presses, and drag-to-select over the text
                 Box(
                     modifier = Modifier
                         .matchParentSize()
@@ -585,21 +482,62 @@ fun ReadingModeScreen(
                                             cachedOffsetMap
                                         )
 
-                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset).let {
-                                            if (it.start == it.end && textValue.text.isNotEmpty()) {
-                                                val s = origOffset.coerceIn(0, textValue.text.length)
-                                                val e = (origOffset + 1).coerceIn(0, textValue.text.length)
-                                                TextRange(s, e)
-                                            } else it
+                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset)
+                                        val finalRange = if (wordRange.length > 0) {
+                                            wordRange
+                                        } else {
+                                            // Long press on whitespace/blank area places caret and allows Insert
+                                            TextRange(origOffset, origOffset)
                                         }
 
-                                        if (wordRange.length > 0) {
-                                            // Standalone selection in Reading Mode
-                                            readingSelection = wordRange
-                                            contextMenuTouchOffset = longPressOffset
-                                            contextMenuSelectedRange = wordRange
-                                            showContextMenu = true
-                                        }
+                                        readingSelection = finalRange
+                                        contextMenuTouchOffset = longPressOffset
+                                        contextMenuSelectedRange = finalRange
+                                        showContextMenu = true
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(textValue.text, settings.hideHeadingSymbols, cachedOffsetMap) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { startOffset ->
+                                    localLayoutResult?.let { layout ->
+                                        val transOffset = layout.getOffsetForPosition(startOffset)
+                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                            transOffset,
+                                            cachedOffsetMap
+                                        )
+                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset)
+                                        val initialRange = if (wordRange.length > 0) wordRange else TextRange(origOffset, origOffset)
+                                        readingSelection = initialRange
+                                        contextMenuSelectedRange = initialRange
+                                        contextMenuTouchOffset = startOffset
+                                        showContextMenu = false
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    localLayoutResult?.let { layout ->
+                                        val transOffset = layout.getOffsetForPosition(change.position)
+                                        val currentOrigOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                            transOffset,
+                                            cachedOffsetMap
+                                        )
+                                        val anchor = readingSelection.start
+                                        val updatedRange = TextRange(anchor, currentOrigOffset)
+                                        readingSelection = updatedRange
+                                        contextMenuSelectedRange = updatedRange
+                                        contextMenuTouchOffset = change.position
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (readingSelection.length > 0) {
+                                        showContextMenu = true
+                                    }
+                                },
+                                onDragCancel = {
+                                    if (readingSelection.length > 0) {
+                                        showContextMenu = true
                                     }
                                 }
                             )
@@ -636,8 +574,10 @@ fun ReadingModeScreen(
             }
 
             // Custom Long-Press Context Menu Popup
-            if (showContextMenu && contextMenuSelectedRange != null && contextMenuSelectedRange!!.length > 0) {
+            if (showContextMenu && contextMenuSelectedRange != null) {
                 val density = LocalDensity.current
+                val range = contextMenuSelectedRange!!
+                val hasSelection = range.length > 0
 
                 Popup(
                     alignment = Alignment.TopCenter,
@@ -670,83 +610,95 @@ fun ReadingModeScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                // Copy
-                                ContextMenuItem(
-                                    icon = Icons.Default.ContentCopy,
-                                    label = "Copy",
-                                    tint = Color(0xFF56D0DE),
-                                    onClick = {
-                                        val range = contextMenuSelectedRange
-                                        if (range != null && range.length > 0) {
+                                if (hasSelection) {
+                                    // Copy
+                                    ContextMenuItem(
+                                        icon = Icons.Default.ContentCopy,
+                                        label = "Copy",
+                                        tint = Color(0xFF56D0DE),
+                                        onClick = {
                                             val subText = textValue.text.substring(range.min, range.max)
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                             val clip = ClipData.newPlainText("text", subText)
                                             clipboard.setPrimaryClip(clip)
                                             viewModel.ttsWrapper.speakFeedback("Copied")
+                                            showContextMenu = false
+                                            readingSelection = TextRange.Zero
+                                            contextMenuSelectedRange = null
                                         }
-                                        showContextMenu = false
-                                        readingSelection = TextRange.Zero
-                                        contextMenuSelectedRange = null
-                                    }
-                                )
+                                    )
 
-                                VerticalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.height(28.dp)
-                                )
+                                    VerticalDivider(
+                                        color = Color(0xFF26344E),
+                                        modifier = Modifier.height(28.dp)
+                                    )
 
-                                // Read
-                                ContextMenuItem(
-                                    icon = Icons.Default.VolumeUp,
-                                    label = "Read",
-                                    tint = Color(0xFF32D796),
-                                    onClick = {
-                                        val start = contextMenuSelectedRange?.min ?: 0
-                                        val end = contextMenuSelectedRange?.max
-                                        showContextMenu = false
-                                        readingSelection = TextRange.Zero
-                                        contextMenuSelectedRange = null
-                                        viewModel.playFrom(start, end)
-                                    }
-                                )
+                                    // Listen
+                                    ContextMenuItem(
+                                        icon = Icons.Default.VolumeUp,
+                                        label = "Listen",
+                                        tint = Color(0xFF32D796),
+                                        onClick = {
+                                            val start = range.min
+                                            val end = range.max
+                                            showContextMenu = false
+                                            readingSelection = TextRange.Zero
+                                            contextMenuSelectedRange = null
+                                            viewModel.playFrom(start, end)
+                                        }
+                                    )
 
-                                VerticalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.height(28.dp)
-                                )
+                                    VerticalDivider(
+                                        color = Color(0xFF26344E),
+                                        modifier = Modifier.height(28.dp)
+                                    )
 
-                                // Edit (Voice & Text Replace)
-                                ContextMenuItem(
-                                    icon = Icons.Default.Mic,
-                                    label = "Edit",
-                                    tint = Color(0xFF38BDF8),
-                                    onClick = {
-                                        showContextMenu = false
-                                        readingSelection = TextRange.Zero
-                                        contextMenuSelectedRange = null
-                                        viewModel.openVoiceReplacePopup()
-                                    }
-                                )
+                                    // Edit (Voice & Text Replace)
+                                    ContextMenuItem(
+                                        icon = Icons.Default.Edit,
+                                        label = "Edit",
+                                        tint = Color(0xFF38BDF8),
+                                        onClick = {
+                                            isInsertMode = false
+                                            showContextMenu = false
+                                            viewModel.openVoiceReplacePopup()
+                                        }
+                                    )
 
-                                VerticalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.height(28.dp)
-                                )
+                                    VerticalDivider(
+                                        color = Color(0xFF26344E),
+                                        modifier = Modifier.height(28.dp)
+                                    )
 
-                                // Delete (Delete selected text)
-                                ContextMenuItem(
-                                    icon = Icons.Default.DeleteOutline,
-                                    label = "Delete",
-                                    tint = Color(0xFFFF6584),
-                                    onClick = {
-                                        val range = contextMenuSelectedRange
-                                        if (range != null && range.length > 0) {
+                                    // Delete (Delete selected text)
+                                    ContextMenuItem(
+                                        icon = Icons.Default.DeleteOutline,
+                                        label = "Delete",
+                                        tint = Color(0xFFFF6584),
+                                        onClick = {
                                             viewModel.deleteRange(range)
                                             viewModel.ttsWrapper.speakFeedback("Deleted")
+                                            showContextMenu = false
+                                            readingSelection = TextRange.Zero
+                                            contextMenuSelectedRange = null
                                         }
+                                    )
+
+                                    VerticalDivider(
+                                        color = Color(0xFF26344E),
+                                        modifier = Modifier.height(28.dp)
+                                    )
+                                }
+
+                                // Insert (Voice & Type box to add text right after selection or at caret)
+                                ContextMenuItem(
+                                    icon = Icons.Default.PostAdd,
+                                    label = "Insert",
+                                    tint = Color(0xFFA78BFA),
+                                    onClick = {
+                                        isInsertMode = true
                                         showContextMenu = false
-                                        readingSelection = TextRange.Zero
-                                        contextMenuSelectedRange = null
+                                        viewModel.openVoiceReplacePopup()
                                     }
                                 )
                             }
@@ -755,7 +707,7 @@ fun ReadingModeScreen(
                 }
             }
 
-            // Bottom Right Minimal Reading Controls (Small Buttons)
+            // Bottom Right Minimal Reading Controls (Edit, Paragraph, Restart, Play/Stop)
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
@@ -771,7 +723,29 @@ fun ReadingModeScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Customizable Function Button (Long-press to customize function)
+                    // Edit (pencil) button: opens whole-document tools
+                    Surface(
+                        onClick = {
+                            showEditToolsSheet = true
+                        },
+                        shape = CircleShape,
+                        color = Color(0xFF1E2638),
+                        border = BorderStroke(1.5.dp, Color(0xFF334155)),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("reading_mode_edit_button")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Document Edit Tools",
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Customizable Function Button (e.g. Paragraph Mode)
                     val isFuncActive = when (selectedFunction) {
                         ReadingFunction.PARAGRAPH -> isParagraphModeActive
                         else -> isPlaying
@@ -813,7 +787,7 @@ fun ReadingModeScreen(
                                                 readingSelection = TextRange.Zero
                                                 contextMenuSelectedRange = null
                                                 showContextMenu = false
-                                                viewModel.playReadingModeFromTop()
+                                                viewModel.restartReading()
                                             }
                                             ReadingFunction.PLAY_FROM_CURSOR -> {
                                                 val start = readingSelection.min.coerceIn(0, textValue.text.length)
@@ -875,7 +849,33 @@ fun ReadingModeScreen(
                         }
                     }
 
-                    // Play / Stop Button (Small button in bottom right)
+                    // Restart (⟲) dedicated button next to Play: jumps to top and reads
+                    Surface(
+                        onClick = {
+                            readingSelection = TextRange.Zero
+                            contextMenuSelectedRange = null
+                            showContextMenu = false
+                            viewModel.restartReading()
+                        },
+                        shape = CircleShape,
+                        color = Color(0xFF1E2638),
+                        border = BorderStroke(1.5.dp, Color(0xFF334155)),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .testTag("reading_mode_restart_button")
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Replay,
+                                contentDescription = "Restart Reading from Top",
+                                tint = Color(0xFF56D0DE),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+
+                    // Play / Stop Button:
+                    // Play resumes from last stopped position; Stop pauses & remembers position
                     Surface(
                         onClick = {
                             if (isPlaying) {
@@ -885,9 +885,10 @@ fun ReadingModeScreen(
                                 readingSelection = TextRange.Zero
                                 contextMenuSelectedRange = null
                                 showContextMenu = false
-                                when (selectedFunction) {
-                                    ReadingFunction.READ_FROM_TOP -> viewModel.playReadingModeFromTop()
-                                    else -> viewModel.playReadingSelection(currentSel)
+                                if (currentSel.length > 0) {
+                                    viewModel.playReadingSelection(currentSel)
+                                } else {
+                                    viewModel.playOrResumeReading()
                                 }
                             }
                         },
@@ -911,6 +912,300 @@ fun ReadingModeScreen(
                         }
                     }
                 }
+            }
+
+            // Whole-Document Tools Bottom Sheet (Opened by Edit / Pencil button)
+            if (showEditToolsSheet) {
+                ModalBottomSheet(
+                    onDismissRequest = { showEditToolsSheet = false },
+                    sheetState = rememberModalBottomSheetState(),
+                    containerColor = Color(0xFF141A28),
+                    dragHandle = {
+                        Box(
+                            modifier = Modifier
+                                .padding(vertical = 10.dp)
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(Color(0xFF334155), RoundedCornerShape(2.dp))
+                        )
+                    }
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                            .padding(bottom = 32.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Whole Document Tools",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFECEEF2),
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+
+                        // Select All
+                        Surface(
+                            onClick = {
+                                showEditToolsSheet = false
+                                val allRange = TextRange(0, textValue.text.length)
+                                readingSelection = allRange
+                                contextMenuSelectedRange = allRange
+                                showContextMenu = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1E283E),
+                            border = BorderStroke(1.dp, Color(0xFF2E3A52)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SelectAll,
+                                    contentDescription = "Select All",
+                                    tint = Color(0xFF56D0DE)
+                                )
+                                Text(
+                                    text = "Select All",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFECEEF2)
+                                )
+                            }
+                        }
+
+                        // Copy All
+                        Surface(
+                            onClick = {
+                                showEditToolsSheet = false
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = ClipData.newPlainText("text", textValue.text)
+                                clipboard.setPrimaryClip(clip)
+                                viewModel.ttsWrapper.speakFeedback("Entire text copied")
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1E283E),
+                            border = BorderStroke(1.dp, Color(0xFF2E3A52)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy All",
+                                    tint = Color(0xFF38BDF8)
+                                )
+                                Text(
+                                    text = "Copy All",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFFECEEF2)
+                                )
+                            }
+                        }
+
+                        // Undo
+                        Surface(
+                            onClick = {
+                                if (canUndo) {
+                                    viewModel.undo()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (canUndo) Color(0xFF1E283E) else Color(0xFF161E30),
+                            border = BorderStroke(1.dp, if (canUndo) Color(0xFF2E3A52) else Color(0xFF1E2638)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Undo,
+                                    contentDescription = "Undo",
+                                    tint = if (canUndo) Color(0xFF32D796) else Color(0xFF4A5568)
+                                )
+                                Text(
+                                    text = "Undo",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (canUndo) Color(0xFFECEEF2) else Color(0xFF4A5568)
+                                )
+                            }
+                        }
+
+                        // Redo
+                        Surface(
+                            onClick = {
+                                if (canRedo) {
+                                    viewModel.redo()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (canRedo) Color(0xFF1E283E) else Color(0xFF161E30),
+                            border = BorderStroke(1.dp, if (canRedo) Color(0xFF2E3A52) else Color(0xFF1E2638)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Redo,
+                                    contentDescription = "Redo",
+                                    tint = if (canRedo) Color(0xFF32D796) else Color(0xFF4A5568)
+                                )
+                                Text(
+                                    text = "Redo",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF4A5568)
+                                )
+                            }
+                        }
+
+                        // Select Paragraph
+                        Surface(
+                            onClick = {
+                                showEditToolsSheet = false
+                                showParagraphPickerDialog = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1E283E),
+                            border = BorderStroke(1.dp, Color(0xFF2E3A52)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Segment,
+                                    contentDescription = "Select Paragraph",
+                                    tint = Color(0xFFA78BFA)
+                                )
+                                Column {
+                                    Text(
+                                        text = "Select Paragraph",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                    Text(
+                                        text = "Select any custom paragraph and open all action tools",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF8FA7D8)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Select Paragraph Picker Dialog
+            if (showParagraphPickerDialog) {
+                val paragraphs = remember(textValue.text) {
+                    val rawText = textValue.text
+                    val list = mutableListOf<Pair<Int, TextRange>>()
+                    var currentStart = 0
+                    val parts = rawText.split("\n")
+                    var pIndex = 1
+                    for (part in parts) {
+                        val length = part.length
+                        if (part.isNotBlank()) {
+                            list.add(Pair(pIndex++, TextRange(currentStart, currentStart + length)))
+                        }
+                        currentStart += length + 1 // +1 for the newline
+                    }
+                    list
+                }
+
+                AlertDialog(
+                    onDismissRequest = { showParagraphPickerDialog = false },
+                    title = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Segment,
+                                contentDescription = null,
+                                tint = Color(0xFFA78BFA)
+                            )
+                            Text(
+                                text = "Select a Paragraph",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFECEEF2)
+                            )
+                        }
+                    },
+                    text = {
+                        if (paragraphs.isEmpty()) {
+                            Text(
+                                text = "No paragraphs found in document.",
+                                color = Color(0xFF8FA7D8),
+                                fontSize = 14.sp
+                            )
+                        } else {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(280.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(paragraphs) { (num, range) ->
+                                    val previewText = textValue.text.substring(range.min, range.max).trim()
+                                    Surface(
+                                        onClick = {
+                                            showParagraphPickerDialog = false
+                                            readingSelection = range
+                                            contextMenuSelectedRange = range
+                                            showContextMenu = true
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xFF1E283E),
+                                        border = BorderStroke(1.dp, Color(0xFF2E3A52)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Text(
+                                                text = "Paragraph $num",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFF56D0DE)
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = if (previewText.length > 90) previewText.take(90) + "…" else previewText,
+                                                fontSize = 13.sp,
+                                                color = Color(0xFFECEEF2),
+                                                maxLines = 2
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showParagraphPickerDialog = false }) {
+                            Text("Cancel", color = Color(0xFF56D0DE), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = Color(0xFF141A28),
+                    shape = RoundedCornerShape(20.dp)
+                )
             }
 
             // Function Picker Dialog for Long Pressing the Quick Button
@@ -1098,7 +1393,7 @@ fun ReadingModeScreen(
                 )
             }
 
-            // Voice Replace Popup reuse
+            // Voice Replace / Insert Popup reuse
             if (showReplacePopup) {
                 val targetText = remember(contextMenuSelectedRange, textValue.text) {
                     val r = contextMenuSelectedRange
@@ -1109,11 +1404,22 @@ fun ReadingModeScreen(
                 ReplacePopup(
                     viewModel = viewModel,
                     initialTargetText = targetText,
+                    isInsertMode = isInsertMode,
                     onApplyReplace = { newText ->
                         val r = contextMenuSelectedRange
-                        if (r != null && r.length > 0) {
-                            viewModel.replaceRange(r, newText)
-                            readingSelection = TextRange(r.min + newText.length)
+                        if (r != null) {
+                            if (isInsertMode) {
+                                viewModel.insertAfterRange(r, newText)
+                                val insertPos = r.max + newText.length
+                                readingSelection = TextRange(insertPos, insertPos)
+                            } else {
+                                if (r.length > 0) {
+                                    viewModel.replaceRange(r, newText)
+                                    readingSelection = TextRange(r.min + newText.length)
+                                } else {
+                                    viewModel.insertAfterRange(r, newText)
+                                }
+                            }
                             contextMenuSelectedRange = null
                         } else {
                             viewModel.applyReplace(targetText ?: "", newText)

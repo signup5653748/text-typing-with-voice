@@ -43,6 +43,7 @@ import com.example.presentation.editor.EditorViewModel
 fun ReplacePopup(
     viewModel: EditorViewModel,
     initialTargetText: String? = null,
+    isInsertMode: Boolean = false,
     onApplyReplace: ((String) -> Unit)? = null
 ) {
     val isListening by viewModel.speechWrapper.isListening.collectAsState()
@@ -169,13 +170,13 @@ fun ReplacePopup(
 
                     Column {
                         Text(
-                            text = "Find & Replace",
+                            text = if (isInsertMode) "Insert Text" else "Find & Replace",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFF1F5F9)
                         )
                         Text(
-                            text = if (isListening) "Listening... speak new text" else "Voice & text editing",
+                            text = if (isListening) "Listening... speak text to insert" else if (isInsertMode) "Voice & text insert" else "Voice & text editing",
                             style = MaterialTheme.typography.bodySmall,
                             color = if (isListening) Color(0xFFFF6584) else Color(0xFF94A3B8)
                         )
@@ -452,30 +453,32 @@ fun ReplacePopup(
                     Text("Cancel", fontWeight = FontWeight.SemiBold)
                 }
 
-                // Replace All
-                Button(
-                    onClick = {
-                        viewModel.applyReplaceAll(findText, replaceWithText)
-                    },
-                    enabled = findText.isNotBlank(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1E293B),
-                        contentColor = Color(0xFF38BDF8),
-                        disabledContainerColor = Color(0xFF141926),
-                        disabledContentColor = Color(0xFF475569)
-                    ),
-                    border = BorderStroke(1.dp, if (findText.isNotBlank()) Color(0xFF0284C7) else Color(0xFF1E293B)),
-                    modifier = Modifier.weight(1.3f).height(48.dp)
-                ) {
-                    Text(
-                        text = if (matchCount > 1) "Replace All ($matchCount)" else "Replace All",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                // Replace All (Only in Find & Replace Mode)
+                if (!isInsertMode) {
+                    Button(
+                        onClick = {
+                            viewModel.applyReplaceAll(findText, replaceWithText)
+                        },
+                        enabled = findText.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E293B),
+                            contentColor = Color(0xFF38BDF8),
+                            disabledContainerColor = Color(0xFF141926),
+                            disabledContentColor = Color(0xFF475569)
+                        ),
+                        border = BorderStroke(1.dp, if (findText.isNotBlank()) Color(0xFF0284C7) else Color(0xFF1E293B)),
+                        modifier = Modifier.weight(1.3f).height(48.dp)
+                    ) {
+                        Text(
+                            text = if (matchCount > 1) "Replace All ($matchCount)" else "Replace All",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
 
-                // Replace
+                // Replace / Insert
                 Button(
                     onClick = {
                         if (onApplyReplace != null) {
@@ -485,17 +488,21 @@ fun ReplacePopup(
                             viewModel.applyReplace(findText, replaceWithText)
                         }
                     },
-                    enabled = findText.isNotBlank() || replaceWithText.isNotBlank(),
+                    enabled = if (isInsertMode) replaceWithText.isNotBlank() else (findText.isNotBlank() || replaceWithText.isNotBlank()),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF0284C7),
+                        containerColor = if (isInsertMode) Color(0xFF10B981) else Color(0xFF0284C7),
                         contentColor = Color.White,
                         disabledContainerColor = Color(0xFF1E293B),
                         disabledContentColor = Color(0xFF475569)
                     ),
-                    modifier = Modifier.weight(1.2f).height(48.dp)
+                    modifier = Modifier.weight(if (isInsertMode) 1.5f else 1.2f).height(48.dp)
                 ) {
-                    Text("Replace", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(
+                        text = if (isInsertMode) "Insert Text" else "Replace",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
             }
         }

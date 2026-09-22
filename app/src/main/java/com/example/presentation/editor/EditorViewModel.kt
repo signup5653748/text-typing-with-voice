@@ -493,6 +493,26 @@ open class EditorViewModel(
     }
 
     /**
+     * Standalone insert operation after a specified range (or at cursor position),
+     * keeping original selected text intact.
+     */
+    fun insertAfterRange(range: TextRange, textToInsert: String) {
+        val current = _textValue.value
+        recordSnapshot(current)
+        val insertPos = range.max.coerceIn(0, current.text.length)
+        val newString = current.text.substring(0, insertPos) + textToInsert + current.text.substring(insertPos)
+        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
+        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        _textValue.value = current.copy(
+            text = newString,
+            selection = TextRange(homeSelStart, homeSelEnd),
+            composition = null
+        )
+        cachedHeadings = null
+        persistDraft()
+    }
+
+    /**
      * Standalone speech playback from Reading Mode's independent selection/cursor.
      */
     fun playReadingSelection(range: TextRange) {
@@ -527,13 +547,26 @@ open class EditorViewModel(
         )
     }
 
-    fun playReadingModeFromTop() {
+    fun playOrResumeReading() {
         val docText = _textValue.value.text
-        if (docText.isBlank()) {
-            ttsWrapper.speakFeedback("Document is empty")
-            return
-        }
-        playFrom(0, docText.length)
+        speechManager.playOrResume(
+            docText = docText,
+            ttsSpeed = settings.value.ttsSpeed,
+            highlightUnit = settings.value.highlightUnit
+        )
+    }
+
+    fun restartReading() {
+        val docText = _textValue.value.text
+        speechManager.restartPlayback(
+            docText = docText,
+            ttsSpeed = settings.value.ttsSpeed,
+            highlightUnit = settings.value.highlightUnit
+        )
+    }
+
+    fun playReadingModeFromTop() {
+        restartReading()
     }
 
     fun togglePlay() {

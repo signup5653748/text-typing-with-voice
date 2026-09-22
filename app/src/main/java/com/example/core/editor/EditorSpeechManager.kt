@@ -29,6 +29,8 @@ class EditorSpeechManager(
     val speechHighlightRange: StateFlow<TextRange?> = _speechHighlightRange.asStateFlow()
 
     private var speechPacingJob: Job? = null
+    private var lastStoppedOffset: Int = 0
+    private var currentPlaybackOffset: Int = 0
 
     init {
         scope.launch {
@@ -43,6 +45,7 @@ class EditorSpeechManager(
         scope.launch {
             ttsWrapper.currentRange.collect { range ->
                 if (ttsWrapper.isPlaying.value && range != null) {
+                    currentPlaybackOffset = range.first
                     _speechHighlightRange.value = TextRange(range.first, range.second)
                 } else if (!ttsWrapper.isPlaying.value) {
                     _speechHighlightRange.value = null
@@ -52,11 +55,52 @@ class EditorSpeechManager(
     }
 
     fun stopPlayback() {
+        if (_speechHighlightRange.value != null) {
+            currentPlaybackOffset = _speechHighlightRange.value!!.start
+        }
+        lastStoppedOffset = currentPlaybackOffset
         if (ttsWrapper.isPlaying.value) {
             ttsWrapper.stop()
         }
         speechPacingJob?.cancel()
         _speechHighlightRange.value = null
+    }
+
+    fun playOrResume(
+        docText: String,
+        ttsSpeed: Float = 1.0f,
+        highlightUnit: String = "LINE"
+    ) {
+        if (docText.isBlank()) {
+            ttsWrapper.speakFeedback("Document is empty")
+            return
+        }
+        val safeStart = lastStoppedOffset.coerceIn(0, docText.length)
+        if (safeStart >= docText.length) {
+            lastStoppedOffset = 0
+            playFrom(docText, 0, docText.length, ttsSpeed, highlightUnit)
+        } else {
+            playFrom(docText, safeStart, docText.length, ttsSpeed, highlightUnit)
+        }
+    }
+
+    fun restartPlayback(
+        docText: String,
+        ttsSpeed: Float = 1.0f,
+        highlightUnit: String = "LINE"
+    ) {
+        if (docText.isBlank()) {
+            ttsWrapper.speakFeedback("Document is empty")
+            return
+        }
+        lastStoppedOffset = 0
+        currentPlaybackOffset = 0
+        playFrom(docText, 0, docText.length, ttsSpeed, highlightUnit)
+    }
+
+    fun resetPlaybackPosition() {
+        lastStoppedOffset = 0
+        currentPlaybackOffset = 0
     }
 
     fun playFrom(
@@ -80,6 +124,9 @@ class EditorSpeechManager(
             }
             return
         }
+
+        currentPlaybackOffset = safeStart
+        lastStoppedOffset = safeStart
 
         val textToRead = docText.substring(safeStart, safeEnd)
         val sanitizedTextToRead = HeadingLogic.maskHeadingSymbolsForTTS(textToRead)
@@ -173,6 +220,7 @@ class EditorSpeechManager(
 
                     if (!ttsWrapper.isPlaying.value) break
                     _speechHighlightRange.value = item.docRange
+                    currentPlaybackOffset = item.docRange.start
 
                     val duration = if (highlightUnit == "LINE") {
                         (item.pauseAfterMs / currentSpeed).toLong().coerceAtLeast(200L)
