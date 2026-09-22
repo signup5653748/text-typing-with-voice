@@ -69,8 +69,11 @@ class SpeechRecognitionWrapper(private val context: Context) {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageCode)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageCode)
+            putExtra("android.speech.extra.EXTRA_ADDITIONAL_LANGUAGES", arrayOf(languageCode))
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
 
         _partialResults.value = ""
@@ -264,8 +267,11 @@ class SpeechRecognitionWrapper(private val context: Context) {
 
     fun openVoiceDownloadSettings(ctx: Context): Boolean {
         val intents = listOf(
-            Intent("com.google.android.voicesearch.intent.action.DOWNLOAD_VOICE_PACK"),
+            Intent("com.samsung.android.settings.INPUT_LANGUAGE_SETTINGS"),
+            Intent("android.settings.VOICE_INPUT_SETTINGS"),
             Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS),
+            Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS),
+            Intent("com.google.android.voicesearch.intent.action.DOWNLOAD_VOICE_PACK"),
             Intent("android.speech.action.VOICE_SETTINGS"),
             Intent(android.provider.Settings.ACTION_LOCALE_SETTINGS),
             Intent(android.provider.Settings.ACTION_SETTINGS)

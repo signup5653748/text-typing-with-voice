@@ -11,8 +11,10 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -58,9 +60,9 @@ fun LanguageItemRow(
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(
-                    if (lang.isOfflineAvailable) Icons.Default.DownloadDone else Icons.Default.Cloud,
-                    contentDescription = if (lang.isOfflineAvailable) "Offline Ready" else "Online Speech",
-                    tint = if (lang.isOfflineAvailable) Color(0xFF34D399) else Color(0xFF94A3B8),
+                    Icons.Default.Mic,
+                    contentDescription = "Voice Typing Language",
+                    tint = if (isSelected) Color(0xFF56D0DE) else Color(0xFF64748B),
                     modifier = Modifier.size(18.dp)
                 )
                 Column {
@@ -70,29 +72,11 @@ fun LanguageItemRow(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = if (isSelected) Color.White else Color(0xFFE2E8F0)
                     )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            lang.languageCode,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF64748B)
-                        )
-                        if (lang.isOfflineAvailable) {
-                            Text(
-                                "• Offline Ready",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF34D399)
-                            )
-                        } else {
-                            Text(
-                                "• Online / Downloadable",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8)
-                            )
-                        }
-                    }
+                    Text(
+                        lang.languageCode,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF64748B)
+                    )
                 }
             }
 
@@ -277,8 +261,8 @@ fun SpeechDownloadHelpCard(
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -288,31 +272,31 @@ fun SpeechDownloadHelpCard(
                     Icons.Default.Info,
                     contentDescription = null,
                     tint = Color(0xFF56D0DE),
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    "Want 100% Offline Voice Typing in other languages?",
+                    "Voice Dictation Language",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = Color(0xFFECEFF8)
                 )
             }
             Text(
-                "Android stores speech recognition voice packs per language. You can download extra offline languages in Android Voice Settings.",
+                "Tap any language above to switch dictation immediately. To manage device speech engines (Samsung / Google), open system settings below.",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF94A3B8),
-                fontSize = 12.sp
+                fontSize = 11.5.sp
             )
             Button(
                 onClick = onOpenSettings,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                 shape = RoundedCornerShape(8.dp),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                 modifier = Modifier.align(Alignment.End)
             ) {
-                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF56D0DE))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Open Voice Settings", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("Device Voice Settings", fontSize = 11.5.sp, color = Color(0xFFECEFF8), fontWeight = FontWeight.Medium)
             }
         }
     }

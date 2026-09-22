@@ -291,7 +291,7 @@ private fun VoiceTypingLanguageCard(
                             onClick = { onLanguageSelected(lang.languageCode) },
                             label = {
                                 Text(
-                                    if (lang.isOfflineAvailable) "${lang.displayName} (Offline)" else lang.displayName,
+                                    lang.displayName,
                                     fontSize = 12.5.sp
                                 )
                             },
