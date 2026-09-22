@@ -32,6 +32,16 @@ class SpeechSettingsViewModel(
                 _uiState.value = _uiState.value.copy(settings = settings)
             }
         }
+        viewModelScope.launch {
+            ttsWrapper.availableTtsLanguages.collect { langs ->
+                if (langs.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        ttsLanguages = langs,
+                        ttsLocales = langs.map { it.locale }
+                    )
+                }
+            }
+        }
         loadSpeechData()
     }
 
@@ -41,9 +51,13 @@ class SpeechSettingsViewModel(
         }
         viewModelScope.launch(Dispatchers.IO) {
             val engines = ttsWrapper.getAvailableEngines()
-            val locales = ttsWrapper.getAvailableVoicesOrLocales()
+            val ttsLangs = ttsWrapper.queryDownloadedTtsLanguages()
             withContext(Dispatchers.Main) {
-                _uiState.value = _uiState.value.copy(ttsEngines = engines, ttsLocales = locales)
+                _uiState.value = _uiState.value.copy(
+                    ttsEngines = engines,
+                    ttsLanguages = ttsLangs,
+                    ttsLocales = ttsLangs.map { it.locale }
+                )
             }
         }
     }
@@ -52,6 +66,7 @@ class SpeechSettingsViewModel(
         viewModelScope.launch {
             settingsRepo.updateTtsEnginePackage(enginePkg)
             ttsWrapper.setEngine(enginePkg)
+            loadSpeechData()
         }
     }
 
@@ -59,6 +74,7 @@ class SpeechSettingsViewModel(
         viewModelScope.launch {
             settingsRepo.updateTtsLanguage(langCode)
             ttsWrapper.setLanguage(langCode)
+            ttsWrapper.speakFeedback("TTS language updated")
         }
     }
 
@@ -67,6 +83,7 @@ class SpeechSettingsViewModel(
             settingsRepo.updateVoiceLanguage(langCode)
             settingsRepo.updateTtsLanguage(langCode)
             ttsWrapper.setLanguage(langCode)
+            ttsWrapper.speakFeedback("Voice language updated")
         }
     }
 }

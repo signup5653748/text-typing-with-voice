@@ -59,7 +59,9 @@ data class SettingsEntity(
     // Starred Folders
     val starredFoldersJson: String = "",
     // Launch & Default Visit Screen
-    val startOnReadingScreen: Boolean = false
+    val startOnReadingScreen: Boolean = false,
+    // Highlight Mode: "LINE" or "WORD"
+    val highlightUnit: String = "LINE"
 )
 
 class SettingsRepository(private val context: Context) {
@@ -84,6 +86,7 @@ class SettingsRepository(private val context: Context) {
     private val DISABLED_SPEECH_FEEDBACK_BUTTONS = stringPreferencesKey("disabledSpeechFeedbackButtons")
     private val HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("hapticFeedbackEnabled")
     private val START_ON_READING_SCREEN = booleanPreferencesKey("startOnReadingScreen")
+    private val HIGHLIGHT_UNIT = stringPreferencesKey("highlightUnit")
     private val STARRED_FOLDERS = stringPreferencesKey("starredFolders")
     private val LAST_SESSION_TEXT = stringPreferencesKey("lastSessionText")
     private val LAST_SESSION_FILE_NAME = stringPreferencesKey("lastSessionFileName")
@@ -161,7 +164,8 @@ class SettingsRepository(private val context: Context) {
             disabledSpeechFeedbackButtons = prefs[DISABLED_SPEECH_FEEDBACK_BUTTONS] ?: "",
             hapticFeedbackEnabled = prefs[HAPTIC_FEEDBACK_ENABLED] ?: true,
             starredFoldersJson = prefs[STARRED_FOLDERS] ?: "",
-            startOnReadingScreen = prefs[START_ON_READING_SCREEN] ?: false
+            startOnReadingScreen = prefs[START_ON_READING_SCREEN] ?: false,
+            highlightUnit = prefs[HIGHLIGHT_UNIT] ?: "LINE"
         )
     }
 
@@ -483,6 +487,12 @@ class SettingsRepository(private val context: Context) {
     suspend fun updateStartOnReadingScreen(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[START_ON_READING_SCREEN] = enabled
+        }
+    }
+
+    suspend fun updateHighlightUnit(unit: String) {
+        context.dataStore.edit { prefs ->
+            prefs[HIGHLIGHT_UNIT] = unit
         }
     }
 }

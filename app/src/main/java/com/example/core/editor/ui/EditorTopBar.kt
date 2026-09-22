@@ -78,10 +78,7 @@ fun EditorTopBar(
     onSaveCurrentFile: () -> Unit,
     onOpenSaveAsDialog: () -> Unit,
     onOpenJumpTo: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    startOnReadingScreen: Boolean = false,
-    onToggleStartOnReadingScreen: ((Boolean) -> Unit)? = null,
-    onAddReadingWidget: (() -> Unit)? = null
+    onNavigateToSettings: () -> Unit
 ) {
     TopAppBar(
         title = {
@@ -191,50 +188,10 @@ fun EditorTopBar(
                     expanded = menuExpanded,
                     onDismissRequest = { onMenuExpandedChange(false) },
                     modifier = Modifier
-                        .width(250.dp)
+                        .width(230.dp)
                         .background(Color(0xFF161E30))
                         .border(1.dp, Color(0xFF26344E), RoundedCornerShape(14.dp))
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("Visit Reading Screen", color = Color(0xFFECEEF2), fontWeight = FontWeight.SemiBold, fontSize = 14.sp) },
-                        leadingIcon = {
-                            Icon(Icons.Default.MenuBook, contentDescription = "Visit Reading Screen", tint = Color(0xFF56D0DE), modifier = Modifier.size(20.dp))
-                        },
-                        onClick = {
-                            onMenuExpandedChange(false)
-                            onNavigateToReadingMode()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Start on Reading Screen", color = Color(0xFFECEEF2), fontSize = 13.sp)
-                                if (startOnReadingScreen) {
-                                    Icon(Icons.Default.Check, contentDescription = "Active", tint = Color(0xFF56D0DE), modifier = Modifier.size(18.dp))
-                                }
-                            }
-                        },
-                        onClick = {
-                            onToggleStartOnReadingScreen?.invoke(!startOnReadingScreen)
-                        }
-                    )
-                    if (onAddReadingWidget != null) {
-                        DropdownMenuItem(
-                            text = { Text("Add Widget to Home", color = Color(0xFFECEEF2), fontSize = 13.sp) },
-                            leadingIcon = {
-                                Icon(Icons.Default.Widgets, contentDescription = "Add Widget", tint = Color(0xFF38BDF8), modifier = Modifier.size(20.dp))
-                            },
-                            onClick = {
-                                onMenuExpandedChange(false)
-                                onAddReadingWidget.invoke()
-                            }
-                        )
-                    }
-                    HorizontalDivider(color = Color(0xFF222B3F), modifier = Modifier.padding(vertical = 4.dp))
                     DropdownMenuItem(
                         text = { Text("Redo", color = if (canRedo) Color(0xFFECEEF2) else Color(0xFF6B7FA8), fontWeight = FontWeight.Medium, fontSize = 14.sp) },
                         leadingIcon = {

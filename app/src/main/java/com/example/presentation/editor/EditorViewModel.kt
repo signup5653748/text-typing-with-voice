@@ -514,7 +514,8 @@ open class EditorViewModel(
             docText = _textValue.value.text,
             startOffset = startOffset,
             endOffset = endOffset,
-            ttsSpeed = settings.value.ttsSpeed
+            ttsSpeed = settings.value.ttsSpeed,
+            highlightUnit = settings.value.highlightUnit
         )
     }
 
@@ -1000,6 +1001,7 @@ open class EditorViewModel(
     fun updateButtonSizeMultiplier(multiplier: Float) { viewModelScope.launch { settingsRepo.updateButtonSizeMultiplier(multiplier) } }
     fun updateArrowSize(scale: Float) { viewModelScope.launch { settingsRepo.updateArrowSize(scale) } }
     fun updateAlwaysInsertMicDirectly(always: Boolean) { viewModelScope.launch { settingsRepo.updateAlwaysInsertMicDirectly(always) } }
+    fun updateHighlightUnit(unit: String) { viewModelScope.launch { settingsRepo.updateHighlightUnit(unit) } }
 
     fun isSpeechFeedbackEnabledFor(buttonName: String): Boolean {
         val s = settings.value

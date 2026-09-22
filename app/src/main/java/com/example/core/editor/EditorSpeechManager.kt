@@ -19,7 +19,7 @@ data class SpokenWord(
 
 /**
  * Coordinates read-aloud TTS playback, word-by-word visual highlighting pacing,
- * and speech feedback.
+ * and speech feedback. Ensures visual highlights ONLY show when TTS audio is actively playing.
  */
 class EditorSpeechManager(
     val ttsWrapper: TTSWrapper,
@@ -39,6 +39,16 @@ class EditorSpeechManager(
                 }
             }
         }
+
+        scope.launch {
+            ttsWrapper.currentRange.collect { range ->
+                if (ttsWrapper.isPlaying.value && range != null) {
+                    _speechHighlightRange.value = TextRange(range.first, range.second)
+                } else if (!ttsWrapper.isPlaying.value) {
+                    _speechHighlightRange.value = null
+                }
+            }
+        }
     }
 
     fun stopPlayback() {
@@ -53,7 +63,8 @@ class EditorSpeechManager(
         docText: String,
         startOffset: Int = 0,
         endOffset: Int? = null,
-        ttsSpeed: Float = 1.0f
+        ttsSpeed: Float = 1.0f,
+        highlightUnit: String = "LINE"
     ) {
         stopPlayback()
         if (docText.isBlank()) {
@@ -65,31 +76,50 @@ class EditorSpeechManager(
         val safeEnd = (endOffset ?: docText.length).coerceIn(safeStart, docText.length)
         if (safeStart >= safeEnd) {
             if (safeStart >= docText.length && docText.isNotEmpty()) {
-                playFrom(docText, 0, docText.length, ttsSpeed)
+                playFrom(docText, 0, docText.length, ttsSpeed, highlightUnit)
             }
             return
         }
 
         val textToRead = docText.substring(safeStart, safeEnd)
         val sanitizedTextToRead = HeadingLogic.maskHeadingSymbolsForTTS(textToRead)
+        if (sanitizedTextToRead.isBlank()) {
+            return
+        }
 
-        val wordRegex = Regex("\\b[\\p{L}\\p{N}']+\\b|\\S+")
-        val words = mutableListOf<SpokenWord>()
-        for (match in wordRegex.findAll(sanitizedTextToRead)) {
-            val token = match.value
-            if (token.any { it.isLetterOrDigit() }) {
-                val wordStart = safeStart + match.range.first
-                val wordEnd = safeStart + match.range.last + 1
-                val nextIdx = match.range.last + 1
-                val pauseAfter = if (nextIdx < sanitizedTextToRead.length) {
-                    when (sanitizedTextToRead[nextIdx]) {
-                        '.', '!', '?' -> 260L
-                        ',', ';', ':', '—', '-' -> 160L
-                        '\n' -> 220L
-                        else -> 0L
-                    }
-                } else 0L
-                words.add(SpokenWord(TextRange(wordStart, wordEnd), token, pauseAfter))
+        val itemsToHighlight = mutableListOf<SpokenWord>()
+        if (highlightUnit == "LINE") {
+            var currIndex = 0
+            val lines = sanitizedTextToRead.split('\n')
+            for (line in lines) {
+                val lineLen = line.length
+                if (line.isNotBlank()) {
+                    val lineStart = safeStart + currIndex
+                    val lineEnd = safeStart + currIndex + lineLen
+                    val wordCount = line.trim().split(Regex("\\s+")).count { it.isNotEmpty() }.coerceAtLeast(1)
+                    val estDuration = (wordCount * 280L) + 200L
+                    itemsToHighlight.add(SpokenWord(TextRange(lineStart, lineEnd), line, estDuration))
+                }
+                currIndex += lineLen + 1
+            }
+        } else {
+            val wordRegex = Regex("\\b[\\p{L}\\p{N}']+\\b|\\S+")
+            for (match in wordRegex.findAll(sanitizedTextToRead)) {
+                val token = match.value
+                if (token.any { it.isLetterOrDigit() }) {
+                    val wordStart = safeStart + match.range.first
+                    val wordEnd = safeStart + match.range.last + 1
+                    val nextIdx = match.range.last + 1
+                    val pauseAfter = if (nextIdx < sanitizedTextToRead.length) {
+                        when (sanitizedTextToRead[nextIdx]) {
+                            '.', '!', '?' -> 260L
+                            ',', ';', ':', '—', '-' -> 160L
+                            '\n' -> 220L
+                            else -> 0L
+                        }
+                    } else 0L
+                    itemsToHighlight.add(SpokenWord(TextRange(wordStart, wordEnd), token, pauseAfter))
+                }
             }
         }
 
@@ -98,11 +128,13 @@ class EditorSpeechManager(
         speechPacingJob?.cancel()
         speechPacingJob = scope.launch {
             var waited = 0
-            while (!ttsWrapper.isPlaying.value && waited < 20) {
+            while (!ttsWrapper.isPlaying.value && waited < 30) {
                 delay(50)
                 waited++
             }
-            if (!ttsWrapper.isPlaying.value && words.isEmpty()) {
+
+            // If TTS did not start playing or audio failed, do NOT highlight anything!
+            if (!ttsWrapper.isPlaying.value) {
                 _speechHighlightRange.value = null
                 return@launch
             }
@@ -112,15 +144,24 @@ class EditorSpeechManager(
 
             val nativeCollectorJob = launch {
                 ttsWrapper.currentRange.collect { range ->
-                    if (range != null) {
+                    if (range != null && ttsWrapper.isPlaying.value) {
                         nativeRangeReported = true
-                        _speechHighlightRange.value = TextRange(range.first, range.second)
+                        if (highlightUnit == "LINE") {
+                            val s = range.first.coerceIn(0, docText.length)
+                            val prevNl = docText.lastIndexOf('\n', (s - 1).coerceAtLeast(0))
+                            val lStart = if (prevNl == -1) 0 else prevNl + 1
+                            val nextNl = docText.indexOf('\n', s)
+                            val lEnd = if (nextNl == -1) docText.length else nextNl
+                            _speechHighlightRange.value = TextRange(lStart, maxOf(lStart, lEnd))
+                        } else {
+                            _speechHighlightRange.value = TextRange(range.first, range.second)
+                        }
                     }
                 }
             }
 
             try {
-                for (item in words) {
+                for (item in itemsToHighlight) {
                     if (!ttsWrapper.isPlaying.value) break
 
                     if (nativeRangeReported) {
@@ -130,21 +171,24 @@ class EditorSpeechManager(
                         break
                     }
 
+                    if (!ttsWrapper.isPlaying.value) break
                     _speechHighlightRange.value = item.docRange
 
-                    val length = item.word.length
-                    val baseDuration = when {
-                        length <= 3 -> 200L
-                        length <= 6 -> 300L
-                        length <= 9 -> 400L
-                        else -> 500L
+                    val duration = if (highlightUnit == "LINE") {
+                        (item.pauseAfterMs / currentSpeed).toLong().coerceAtLeast(200L)
+                    } else {
+                        val length = item.word.length
+                        val baseDuration = when {
+                            length <= 3 -> 200L
+                            length <= 6 -> 300L
+                            length <= 9 -> 400L
+                            else -> 500L
+                        }
+                        ((baseDuration + item.pauseAfterMs) / currentSpeed).toLong().coerceAtLeast(80L)
                     }
-                    val wordDuration = ((baseDuration + item.pauseAfterMs) / currentSpeed)
-                        .toLong()
-                        .coerceAtLeast(80L)
 
-                    val stepMs = 75L
-                    val steps = (wordDuration / stepMs).coerceAtLeast(1L)
+                    val stepMs = 60L
+                    val steps = (duration / stepMs).coerceAtLeast(1L)
                     for (s in 0 until steps) {
                         if (!ttsWrapper.isPlaying.value || nativeRangeReported) break
                         delay(stepMs)

@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">VoiceType Editor</string>
-    <string name="widget_name">Reading Screen Widget</string>
-    <string name="widget_description">Visit Reading Screen and control playback directly from your Home Screen.</string>
+    <string name="app_name_edit_mode">VoiceType Editor (Edit Mode)</string>
+    <string name="app_name_reading_mode">VoiceType Editor (Reading Mode)</string>
 </resources>

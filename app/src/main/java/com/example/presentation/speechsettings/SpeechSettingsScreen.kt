@@ -61,6 +61,7 @@ fun SpeechSettingsScreen(
 
             item(key = "tts_language_card") {
                 TtsLanguageCard(
+                    ttsLanguages = uiState.ttsLanguages,
                     ttsLocales = uiState.ttsLocales,
                     selectedTtsLanguage = settings.ttsLanguage,
                     onLanguageSelected = { viewModel.updateTtsLanguage(it) }
@@ -124,6 +125,7 @@ private fun TtsEnginesCard(
 
 @Composable
 private fun TtsLanguageCard(
+    ttsLanguages: List<com.example.speech.TtsLanguageItem>,
     ttsLocales: List<Locale>,
     selectedTtsLanguage: String,
     onLanguageSelected: (String) -> Unit
@@ -135,27 +137,47 @@ private fun TtsLanguageCard(
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("Text-to-Speech Language", style = MaterialTheme.typography.titleMedium, color = Color(0xFFECEFF8), fontWeight = FontWeight.SemiBold)
-            Text("Voice language used when reading document text aloud", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
+            Text("Voice language used when reading document text aloud (Downloaded voices detected)", color = Color(0xFF8FA7D8), fontSize = 12.5.sp)
 
-            val availableVoiceItems = remember(ttsLocales) {
-                val list = ttsLocales.ifEmpty { listOf(Locale.getDefault()) }
-                val defaultLoc = Locale.getDefault()
-                list.distinctBy { it.language to it.country }.map { loc ->
-                    val tag = loc.toLanguageTag().ifBlank { "${loc.language}-${loc.country}".trimEnd('-') }
-                    val label = loc.getDisplayName(defaultLoc).ifBlank { loc.displayName }.replaceFirstChar { it.uppercase() }
-                    tag to label
+            val availableVoiceItems = remember(ttsLanguages, ttsLocales) {
+                if (ttsLanguages.isNotEmpty()) {
+                    ttsLanguages.map { item ->
+                        Triple(item.languageTag, item.displayName, item.isDownloaded)
+                    }
+                } else {
+                    val list = ttsLocales.ifEmpty { listOf(Locale.getDefault()) }
+                    val defaultLoc = Locale.getDefault()
+                    list.distinctBy { it.language to it.country }.map { loc ->
+                        val tag = loc.toLanguageTag().ifBlank { "${loc.language}-${loc.country}".trimEnd('-') }
+                        val label = loc.getDisplayName(defaultLoc).ifBlank { loc.displayName }.replaceFirstChar { it.uppercase() }
+                        Triple(tag, label, true)
+                    }
                 }
             }
 
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                availableVoiceItems.forEach { (tag, labelName) ->
-                    val isSelected = selectedTtsLanguage == tag || (selectedTtsLanguage.isEmpty() && tag.startsWith("en", ignoreCase = true))
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onLanguageSelected(tag) },
-                        label = { Text(labelName, fontSize = 12.5.sp) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Color(0xFF2563EB), selectedLabelColor = Color.White, containerColor = Color(0xFF20293D), labelColor = Color(0xFFECEFF8))
-                    )
+            if (availableVoiceItems.isEmpty()) {
+                Text("No TTS languages found on system", color = Color(0xFF64748B), fontSize = 13.sp)
+            } else {
+                Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    availableVoiceItems.forEach { (tag, labelName, isDownloaded) ->
+                        val isSelected = selectedTtsLanguage == tag || (selectedTtsLanguage.isEmpty() && tag.startsWith("en", ignoreCase = true))
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onLanguageSelected(tag) },
+                            label = {
+                                Text(
+                                    if (isDownloaded) "$labelName ✓" else labelName,
+                                    fontSize = 12.5.sp
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF2563EB),
+                                selectedLabelColor = Color.White,
+                                containerColor = Color(0xFF20293D),
+                                labelColor = Color(0xFFECEFF8)
+                            )
+                        )
+                    }
                 }
             }
         }

@@ -219,10 +219,10 @@ fun ReadingModeScreen(
     var showFunctionPickerDialog by remember { mutableStateOf(false) }
     var menuExpanded by remember { mutableStateOf(false) }
     var showTextSizeDialog by remember { mutableStateOf(false) }
+    var showColorPickerDialog by remember { mutableStateOf(false) }
 
     // Long press custom popup state
     var showContextMenu by remember { mutableStateOf(false) }
-    var showColorPickerInMenu by remember { mutableStateOf(false) }
     var contextMenuTouchOffset by remember { mutableStateOf(Offset.Zero) }
     var contextMenuSelectedRange by remember { mutableStateOf<TextRange?>(null) }
 
@@ -298,154 +298,7 @@ fun ReadingModeScreen(
                     }
                 },
                 actions = {
-                    // Standalone Edit Button for instant, one-tap access
-                    FilledTonalButton(
-                        onClick = {
-                            viewModel.stopPlayback()
-                            onNavigateBack()
-                        },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = Color(0xFF1E283E),
-                            contentColor = Color(0xFF56D0DE)
-                        ),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier
-                            .height(36.dp)
-                            .testTag("reading_mode_standalone_edit_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Document",
-                            tint = Color(0xFF56D0DE),
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Edit",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFECEEF2)
-                        )
-                    }
-
-                    // Text size button
-                    Box {
-                        IconButton(
-                            onClick = { showTextSizeDialog = !showTextSizeDialog },
-                            modifier = Modifier.testTag("reading_mode_text_size_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FormatSize,
-                                contentDescription = "Adjust Text Size",
-                                tint = if (showTextSizeDialog) Color(0xFF56D0DE) else Color(0xFF8FA7D8)
-                            )
-                        }
-
-                        // Text size adjustment popup
-                        if (showTextSizeDialog) {
-                            Popup(
-                                alignment = Alignment.TopEnd,
-                                offset = IntOffset(0, 120),
-                                onDismissRequest = { showTextSizeDialog = false },
-                                properties = PopupProperties(focusable = true)
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(16.dp),
-                                    color = Color(0xFF161E30),
-                                    border = BorderStroke(1.5.dp, Color(0xFF26344E)),
-                                    shadowElevation = 12.dp,
-                                    modifier = Modifier.padding(end = 12.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(14.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Text(
-                                            text = "Text Size",
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF8FA7D8)
-                                        )
-
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                        ) {
-                                            IconButton(
-                                                onClick = {
-                                                    val newSize = (settings.textSizeSp - 2f).coerceAtLeast(12f)
-                                                    viewModel.updateTextSize(newSize)
-                                                },
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .background(Color(0xFF1E283E), RoundedCornerShape(10.dp))
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Remove,
-                                                    contentDescription = "Decrease Font Size",
-                                                    tint = Color(0xFFECEEF2)
-                                                )
-                                            }
-
-                                            Text(
-                                                text = "${settings.textSizeSp.toInt()} sp",
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF56D0DE),
-                                                modifier = Modifier.widthIn(min = 54.dp)
-                                            )
-
-                                            IconButton(
-                                                onClick = {
-                                                    val newSize = (settings.textSizeSp + 2f).coerceAtMost(48f)
-                                                    viewModel.updateTextSize(newSize)
-                                                },
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .background(Color(0xFF1E283E), RoundedCornerShape(10.dp))
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Add,
-                                                    contentDescription = "Increase Font Size",
-                                                    tint = Color(0xFFECEEF2)
-                                                )
-                                            }
-                                        }
-
-                                        // Preset sizes
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            listOf(16f, 20f, 24f, 28f, 32f).forEach { size ->
-                                                val isSelected = settings.textSizeSp.toInt() == size.toInt()
-                                                Box(
-                                                    modifier = Modifier
-                                                        .background(
-                                                            if (isSelected) Color(0xFF2563EB) else Color(0xFF1E283E),
-                                                            RoundedCornerShape(8.dp)
-                                                        )
-                                                        .clickable { viewModel.updateTextSize(size) }
-                                                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = "${size.toInt()}",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                        color = if (isSelected) Color.White else Color(0xFF8FA7D8)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Three-dot menu
+                    // Three-dot menu containing all options
                     Box {
                         IconButton(
                             onClick = { menuExpanded = !menuExpanded },
@@ -465,6 +318,73 @@ fun ReadingModeScreen(
                             },
                             modifier = Modifier.background(Color(0xFF161E30))
                         ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Copy all text",
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy all text",
+                                        tint = Color(0xFF56D0DE)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    val clip = ClipData.newPlainText("text", textValue.text)
+                                    clipboard.setPrimaryClip(clip)
+                                    viewModel.ttsWrapper.speakFeedback("Entire text copied")
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF26344E))
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Text size",
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.FormatSize,
+                                        contentDescription = "Text size",
+                                        tint = Color(0xFF56D0DE)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showTextSizeDialog = true
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Highlight color",
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Palette,
+                                        contentDescription = "Highlight color",
+                                        tint = highlightColor
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    showColorPickerDialog = true
+                                }
+                            )
+
+                            HorizontalDivider(color = Color(0xFF26344E))
+
                             DropdownMenuItem(
                                 text = {
                                     Text(
@@ -507,26 +427,6 @@ fun ReadingModeScreen(
                                 }
                             )
 
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        "Add new line",
-                                        color = Color(0xFFECEEF2)
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardReturn,
-                                        contentDescription = "Add new line",
-                                        tint = Color(0xFF32D796)
-                                    )
-                                },
-                                onClick = {
-                                    viewModel.addNewLine()
-                                    menuExpanded = false
-                                }
-                            )
-
                             HorizontalDivider(color = Color(0xFF26344E))
 
                             DropdownMenuItem(
@@ -548,6 +448,26 @@ fun ReadingModeScreen(
                                     val allRange = TextRange(0, textValue.text.length)
                                     readingSelection = allRange
                                     contextMenuSelectedRange = allRange
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Add new line",
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardReturn,
+                                        contentDescription = "Add new line",
+                                        tint = Color(0xFF32D796)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    viewModel.addNewLine()
                                 }
                             )
                         }
@@ -639,7 +559,6 @@ fun ReadingModeScreen(
 
                                     if (showContextMenu) {
                                         showContextMenu = false
-                                        showColorPickerInMenu = false
                                     }
 
                                     localLayoutResult?.let { layout ->
@@ -728,7 +647,6 @@ fun ReadingModeScreen(
                     },
                     onDismissRequest = {
                         showContextMenu = false
-                        showColorPickerInMenu = false
                     },
                     properties = PopupProperties(
                         focusable = false,
@@ -767,8 +685,8 @@ fun ReadingModeScreen(
                                             viewModel.ttsWrapper.speakFeedback("Copied")
                                         }
                                         showContextMenu = false
-                                        showColorPickerInMenu = false
                                         readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
                                     }
                                 )
 
@@ -786,25 +704,9 @@ fun ReadingModeScreen(
                                         val start = contextMenuSelectedRange?.min ?: 0
                                         val end = contextMenuSelectedRange?.max
                                         showContextMenu = false
-                                        showColorPickerInMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
                                         viewModel.playFrom(start, end)
-                                    }
-                                )
-
-                                VerticalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.height(28.dp)
-                                )
-
-                                // Select All
-                                ContextMenuItem(
-                                    icon = Icons.Default.SelectAll,
-                                    label = "All",
-                                    tint = Color(0xFFA855F7),
-                                    onClick = {
-                                        val allRange = TextRange(0, textValue.text.length)
-                                        readingSelection = allRange
-                                        contextMenuSelectedRange = allRange
                                     }
                                 )
 
@@ -820,7 +722,8 @@ fun ReadingModeScreen(
                                     tint = Color(0xFF38BDF8),
                                     onClick = {
                                         showContextMenu = false
-                                        showColorPickerInMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
                                         viewModel.openVoiceReplacePopup()
                                     }
                                 )
@@ -830,22 +733,7 @@ fun ReadingModeScreen(
                                     modifier = Modifier.height(28.dp)
                                 )
 
-                                // Color Picker
-                                ContextMenuItem(
-                                    icon = Icons.Default.Palette,
-                                    label = "Color",
-                                    tint = highlightColor,
-                                    onClick = {
-                                        showColorPickerInMenu = !showColorPickerInMenu
-                                    }
-                                )
-
-                                VerticalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.height(28.dp)
-                                )
-
-                                // Delete
+                                // Delete (Delete selected text)
                                 ContextMenuItem(
                                     icon = Icons.Default.DeleteOutline,
                                     label = "Delete",
@@ -854,54 +742,13 @@ fun ReadingModeScreen(
                                         val range = contextMenuSelectedRange
                                         if (range != null && range.length > 0) {
                                             viewModel.deleteRange(range)
-                                            readingSelection = TextRange.Zero
-                                            contextMenuSelectedRange = null
                                             viewModel.ttsWrapper.speakFeedback("Deleted")
                                         }
                                         showContextMenu = false
-                                        showColorPickerInMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
                                     }
                                 )
-                            }
-
-                            // In-place Color Palette Row
-                            if (showColorPickerInMenu) {
-                                HorizontalDivider(
-                                    color = Color(0xFF26344E),
-                                    modifier = Modifier.padding(vertical = 6.dp)
-                                )
-                                Row(
-                                    modifier = Modifier.padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    val quickColors = listOf(
-                                        0xFF38BDF8L to "Sky Blue",
-                                        0xFF56D0DEL to "Cyan Teal",
-                                        0xFF2563EBL to "Royal Blue",
-                                        0xFF32D796L to "Mint Green",
-                                        0xFFFF6584L to "Coral Pink",
-                                        0xFFA855F7L to "Purple",
-                                        0xFFFF9800L to "Orange",
-                                        0xFFFFD600L to "Yellow"
-                                    )
-                                    quickColors.forEach { (colorHex, name) ->
-                                        Box(
-                                            modifier = Modifier
-                                                .size(24.dp)
-                                                .background(Color(colorHex), CircleShape)
-                                                .border(
-                                                    width = if (settings.highlightColorHex == colorHex) 2.dp else 1.dp,
-                                                    color = if (settings.highlightColorHex == colorHex) Color.White else Color(0x66FFFFFF),
-                                                    shape = CircleShape
-                                                )
-                                                .clickable {
-                                                    viewModel.updateHighlightColor(colorHex)
-                                                    viewModel.ttsWrapper.speakFeedback(name)
-                                                }
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
@@ -953,6 +800,9 @@ fun ReadingModeScreen(
                                         when (selectedFunction) {
                                             ReadingFunction.PARAGRAPH -> {
                                                 isParagraphModeActive = !isParagraphModeActive
+                                                readingSelection = TextRange.Zero
+                                                contextMenuSelectedRange = null
+                                                showContextMenu = false
                                                 if (isParagraphModeActive) {
                                                     viewModel.ttsWrapper.speakFeedback("Paragraph mode on. Tap any paragraph to read.")
                                                 } else {
@@ -960,17 +810,24 @@ fun ReadingModeScreen(
                                                 }
                                             }
                                             ReadingFunction.READ_FROM_TOP -> {
+                                                readingSelection = TextRange.Zero
+                                                contextMenuSelectedRange = null
+                                                showContextMenu = false
                                                 viewModel.playReadingModeFromTop()
                                             }
                                             ReadingFunction.PLAY_FROM_CURSOR -> {
                                                 val start = readingSelection.min.coerceIn(0, textValue.text.length)
+                                                readingSelection = TextRange.Zero
+                                                contextMenuSelectedRange = null
+                                                showContextMenu = false
                                                 viewModel.playFrom(start)
                                             }
                                             ReadingFunction.SENTENCE_READ -> {
                                                 val range = findSentenceRange(textValue.text, readingSelection.min)
+                                                readingSelection = TextRange.Zero
+                                                contextMenuSelectedRange = null
+                                                showContextMenu = false
                                                 if (range.length > 0) {
-                                                    readingSelection = range
-                                                    contextMenuSelectedRange = range
                                                     viewModel.playFrom(range.start, range.end)
                                                 } else {
                                                     viewModel.ttsWrapper.speakFeedback("No sentence found")
@@ -1024,9 +881,13 @@ fun ReadingModeScreen(
                             if (isPlaying) {
                                 viewModel.stopPlayback()
                             } else {
+                                val currentSel = readingSelection
+                                readingSelection = TextRange.Zero
+                                contextMenuSelectedRange = null
+                                showContextMenu = false
                                 when (selectedFunction) {
                                     ReadingFunction.READ_FROM_TOP -> viewModel.playReadingModeFromTop()
-                                    else -> viewModel.playReadingSelection(readingSelection)
+                                    else -> viewModel.playReadingSelection(currentSel)
                                 }
                             }
                         },
@@ -1079,6 +940,82 @@ fun ReadingModeScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            // Highlighting Mode switcher (Line vs Word)
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF1E283E),
+                                border = BorderStroke(1.dp, Color(0xFF2E3A52)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Highlight Mode",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFFECEEF2)
+                                            )
+                                            Text(
+                                                text = if (settings.highlightUnit == "LINE") "Line-by-line (Fast & efficient)" else "Word-by-word",
+                                                fontSize = 12.sp,
+                                                color = Color(0xFF8FA7D8)
+                                            )
+                                        }
+
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            val isLine = settings.highlightUnit == "LINE"
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.updateHighlightUnit("LINE")
+                                                    viewModel.ttsWrapper.speakFeedback("Line highlight mode active")
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (isLine) Color(0xFF2563EB) else Color(0xFF161E30),
+                                                border = BorderStroke(1.dp, if (isLine) Color(0xFF56D0DE) else Color(0xFF2E3A52))
+                                            ) {
+                                                Text(
+                                                    text = "Line",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (isLine) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isLine) Color.White else Color(0xFF8FA7D8),
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                                )
+                                            }
+
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.updateHighlightUnit("WORD")
+                                                    viewModel.ttsWrapper.speakFeedback("Word highlight mode active")
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (!isLine) Color(0xFF2563EB) else Color(0xFF161E30),
+                                                border = BorderStroke(1.dp, if (!isLine) Color(0xFF56D0DE) else Color(0xFF2E3A52))
+                                            ) {
+                                                Text(
+                                                    text = "Word",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = if (!isLine) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (!isLine) Color.White else Color(0xFF8FA7D8),
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            HorizontalDivider(
+                                color = Color(0xFF26344E),
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+
                             Text(
                                 text = "Choose a function to replace the button. Long-press the button anytime to change again:",
                                 fontSize = 13.sp,
@@ -1182,6 +1119,194 @@ fun ReadingModeScreen(
                             viewModel.applyReplace(targetText ?: "", newText)
                         }
                     }
+                )
+            }
+
+            // Text Size Dialog (Opened from 3-dot menu)
+            if (showTextSizeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showTextSizeDialog = false },
+                    title = {
+                        Text(
+                            text = "Text Size",
+                            color = Color(0xFFECEEF2),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                IconButton(
+                                    onClick = {
+                                        val newSize = (settings.textSizeSp - 2f).coerceAtLeast(12f)
+                                        viewModel.updateTextSize(newSize)
+                                    },
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(Color(0xFF1E283E), RoundedCornerShape(12.dp))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "Decrease Font Size",
+                                        tint = Color(0xFFECEEF2)
+                                    )
+                                }
+
+                                Text(
+                                    text = "${settings.textSizeSp.toInt()} sp",
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF56D0DE),
+                                    modifier = Modifier.widthIn(min = 60.dp)
+                                )
+
+                                IconButton(
+                                    onClick = {
+                                        val newSize = (settings.textSizeSp + 2f).coerceAtMost(48f)
+                                        viewModel.updateTextSize(newSize)
+                                    },
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .background(Color(0xFF1E283E), RoundedCornerShape(12.dp))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Increase Font Size",
+                                        tint = Color(0xFFECEEF2)
+                                    )
+                                }
+                            }
+
+                            // Preset sizes
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(16f, 20f, 24f, 28f, 32f).forEach { size ->
+                                    val isSelected = settings.textSizeSp.toInt() == size.toInt()
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                if (isSelected) Color(0xFF2563EB) else Color(0xFF1E283E),
+                                                RoundedCornerShape(8.dp)
+                                            )
+                                            .clickable { viewModel.updateTextSize(size) }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "${size.toInt()}",
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            color = if (isSelected) Color.White else Color(0xFF8FA7D8)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showTextSizeDialog = false }) {
+                            Text("Done", color = Color(0xFF56D0DE), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = Color(0xFF141A28),
+                    shape = RoundedCornerShape(20.dp)
+                )
+            }
+
+            // Highlight Color Picker Dialog (Opened from 3-dot menu)
+            if (showColorPickerDialog) {
+                AlertDialog(
+                    onDismissRequest = { showColorPickerDialog = false },
+                    title = {
+                        Text(
+                            text = "Highlight Color",
+                            color = Color(0xFFECEEF2),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            val colorOptions = listOf(
+                                0xFF38BDF8L to "Sky Blue",
+                                0xFF56D0DEL to "Cyan Teal",
+                                0xFF2563EBL to "Royal Blue",
+                                0xFF32D796L to "Mint Green",
+                                0xFFFF6584L to "Coral Pink",
+                                0xFFA855F7L to "Purple",
+                                0xFFFF9800L to "Orange",
+                                0xFFFFD600L to "Yellow"
+                            )
+
+                            colorOptions.chunked(4).forEach { rowColors ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceEvenly,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    rowColors.forEach { (colorHex, name) ->
+                                        val isSelected = settings.highlightColorHex == colorHex
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier
+                                                .clickable {
+                                                    viewModel.updateHighlightColor(colorHex)
+                                                    viewModel.ttsWrapper.speakFeedback(name)
+                                                    showColorPickerDialog = false
+                                                }
+                                                .padding(6.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .background(Color(colorHex), CircleShape)
+                                                    .border(
+                                                        width = if (isSelected) 3.dp else 1.dp,
+                                                        color = if (isSelected) Color.White else Color(0x55FFFFFF),
+                                                        shape = CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isSelected) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Check,
+                                                        contentDescription = "Selected",
+                                                        tint = if ((Color(colorHex).red * 0.299f + Color(colorHex).green * 0.587f + Color(colorHex).blue * 0.114f) > 0.5f) Color.Black else Color.White,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = name,
+                                                fontSize = 11.sp,
+                                                color = if (isSelected) Color(0xFF56D0DE) else Color(0xFF8FA7D8)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showColorPickerDialog = false }) {
+                            Text("Close", color = Color(0xFF56D0DE), fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    containerColor = Color(0xFF141A28),
+                    shape = RoundedCornerShape(20.dp)
                 )
             }
         }

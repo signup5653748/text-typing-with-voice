@@ -39,6 +39,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        com.example.util.ReadingShortcutHelper.publishDynamicShortcut(this)
         setContent {
             MyApplicationTheme {
                 Surface(
@@ -53,7 +54,7 @@ class MainActivity : ComponentActivity() {
                     LaunchedEffect(settings.startOnReadingScreen) {
                         processIntent(intent, viewModel, navController)
                         if (!initialNavHandled) {
-                            val openReadingMode = intent?.getBooleanExtra("open_reading_mode", false) ?: false
+                            val openReadingMode = isReadingModeIntent(intent)
                             if (openReadingMode || settings.startOnReadingScreen) {
                                 navController.navigate("reading_mode") {
                                     launchSingleTop = true
@@ -132,6 +133,13 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
     }
 
+    private fun isReadingModeIntent(intent: Intent?): Boolean {
+        if (intent == null) return false
+        if (intent.getBooleanExtra("open_reading_mode", false)) return true
+        val className = intent.component?.className ?: ""
+        return className.contains("ReadingMode", ignoreCase = true)
+    }
+
     private fun processIntent(intent: Intent?, viewModel: EditorViewModel, navController: NavController? = null) {
         if (intent == null) return
         val action = intent.action
@@ -142,7 +150,7 @@ class MainActivity : ComponentActivity() {
                 viewModel.loadFromUri(uri, isFromExternalOrExplicitOpen = true)
             }
         }
-        if (intent.getBooleanExtra("open_reading_mode", false)) {
+        if (isReadingModeIntent(intent)) {
             navController?.navigate("reading_mode") {
                 launchSingleTop = true
             }

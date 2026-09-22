@@ -34,14 +34,19 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:label="@string/app_name_edit_mode">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="text/*" />
                 <data android:mimeType="text/plain" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:label="@string/app_name_edit_mode">
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.EDIT" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -51,20 +56,49 @@
                 <data android:mimeType="*/*" />
                 <data android:host="*" />
                 <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.MD" />
             </intent-filter>
         </activity>
 
-        <receiver
-            android:name=".widget.ReadingModeWidgetProvider"
+        <activity-alias
+            android:name=".ReadingModeAlias"
+            android:targetActivity=".MainActivity"
             android:exported="true"
-            android:label="@string/widget_name">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            android:label="@string/app_name_reading_mode"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter android:label="@string/app_name_reading_mode">
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+                <data android:mimeType="application/msword" />
+                <data android:mimeType="application/octet-stream" />
             </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/reading_mode_widget_info" />
-        </receiver>
+            <intent-filter android:label="@string/app_name_reading_mode">
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.EDIT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.docx" />
+                <data android:pathPattern=".*\\.DOCX" />
+                <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.MD" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
 </manifest>

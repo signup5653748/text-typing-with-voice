@@ -92,6 +92,80 @@ fun LanguageItemRow(
 }
 
 @Composable
+fun TtsLanguageItemRow(
+    item: com.example.speech.TtsLanguageItem,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onSelect),
+        color = if (isSelected) Color(0xFF1E2C4A) else Color(0xFF0F172A),
+        border = BorderStroke(
+            1.dp,
+            if (isSelected) Color(0xFF38BDF8) else Color(0xFF1E293B)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.DownloadDone,
+                    contentDescription = "Downloaded TTS",
+                    tint = if (isSelected) Color(0xFF56D0DE) else Color(0xFF34D399),
+                    modifier = Modifier.size(18.dp)
+                )
+                Column {
+                    Text(
+                        item.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                        color = if (isSelected) Color.White else Color(0xFFE2E8F0)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            item.languageTag,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B)
+                        )
+                        if (item.isDownloaded) {
+                            Text(
+                                "• Downloaded",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF34D399)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Selected",
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 fun LanguageLoadingBox(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
@@ -107,7 +181,10 @@ fun LanguageLoadingBox(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun LanguageEmptyBox(modifier: Modifier = Modifier) {
+fun LanguageEmptyBox(
+    message: String = "No offline voice packs detected on device.",
+    modifier: Modifier = Modifier
+) {
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -115,7 +192,7 @@ fun LanguageEmptyBox(modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Text(
-            "No offline voice packs detected on device.",
+            message,
             color = Color(0xFF94A3B8),
             fontSize = 14.sp
         )
