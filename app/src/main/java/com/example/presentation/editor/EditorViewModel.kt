@@ -92,6 +92,13 @@ open class EditorViewModel(
     private val _showReplacePopup = MutableStateFlow(false)
     val showReplacePopup: StateFlow<Boolean> = _showReplacePopup.asStateFlow()
 
+    // Exact selection range captured at the moment Edit/Replace is opened (positional editing)
+    private val _replaceTargetRange = MutableStateFlow<TextRange?>(null)
+    val replaceTargetRange: StateFlow<TextRange?> = _replaceTargetRange.asStateFlow()
+
+    private val _replaceOriginalText = MutableStateFlow<String?>(null)
+    val replaceOriginalText: StateFlow<String?> = _replaceOriginalText.asStateFlow()
+
     private val _showLanguagePicker = MutableStateFlow(false)
     val showLanguagePicker: StateFlow<Boolean> = _showLanguagePicker.asStateFlow()
 
@@ -450,8 +457,8 @@ open class EditorViewModel(
     fun deleteSelection() = onAction(ActionButton.DELETE)
 
     /**
-     * Standalone delete operation for ranges (e.g. from Reading Mode),
-     * without overwriting or coupling with the Editor screen's selection.
+     * Standalone delete operation for ranges (e.g. from Reading Mode or selection),
+     * operating purely on character indices.
      */
     fun deleteRange(range: TextRange) {
         val current = _textValue.value
@@ -460,20 +467,24 @@ open class EditorViewModel(
         val start = range.min.coerceIn(0, current.text.length)
         val end = range.max.coerceIn(0, current.text.length)
         val newString = current.text.substring(0, start) + current.text.substring(end)
-        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
-        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        val newCaret = start.coerceIn(0, newString.length)
         _textValue.value = current.copy(
             text = newString,
-            selection = TextRange(homeSelStart, homeSelEnd),
+            selection = TextRange(newCaret, newCaret),
             composition = null
         )
+        if (_selActive.value) {
+            _selActive.value = false
+            selectionManager.selAnchor = null
+        }
         cachedHeadings = null
+        resetCursorState()
         persistDraft()
     }
 
     /**
-     * Standalone replace operation for ranges (e.g. from Reading Mode),
-     * preserving Editor screen's independent selection state.
+     * Standalone replace operation for ranges, operating purely on character indices
+     * (exact positional editing without text content searching).
      */
     fun replaceRange(range: TextRange, newText: String) {
         val current = _textValue.value
@@ -481,34 +492,42 @@ open class EditorViewModel(
         val start = range.min.coerceIn(0, current.text.length)
         val end = range.max.coerceIn(0, current.text.length)
         val newString = current.text.substring(0, start) + newText + current.text.substring(end)
-        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
-        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        val newCaret = (start + newText.length).coerceIn(0, newString.length)
         _textValue.value = current.copy(
             text = newString,
-            selection = TextRange(homeSelStart, homeSelEnd),
+            selection = TextRange(newCaret, newCaret),
             composition = null
         )
+        if (_selActive.value) {
+            _selActive.value = false
+            selectionManager.selAnchor = null
+        }
         cachedHeadings = null
+        resetCursorState()
         persistDraft()
     }
 
     /**
      * Standalone insert operation after a specified range (or at cursor position),
-     * keeping original selected text intact.
+     * operating purely on character indices.
      */
     fun insertAfterRange(range: TextRange, textToInsert: String) {
         val current = _textValue.value
         recordSnapshot(current)
         val insertPos = range.max.coerceIn(0, current.text.length)
         val newString = current.text.substring(0, insertPos) + textToInsert + current.text.substring(insertPos)
-        val homeSelStart = current.selection.start.coerceIn(0, newString.length)
-        val homeSelEnd = current.selection.end.coerceIn(0, newString.length)
+        val newCaret = (insertPos + textToInsert.length).coerceIn(0, newString.length)
         _textValue.value = current.copy(
             text = newString,
-            selection = TextRange(homeSelStart, homeSelEnd),
+            selection = TextRange(newCaret, newCaret),
             composition = null
         )
+        if (_selActive.value) {
+            _selActive.value = false
+            selectionManager.selAnchor = null
+        }
         cachedHeadings = null
+        resetCursorState()
         persistDraft()
     }
 
@@ -602,7 +621,29 @@ open class EditorViewModel(
         }
     }
 
-    fun openVoiceReplacePopup() {
+    fun openVoiceReplacePopup(targetRange: TextRange? = null) {
+        val current = _textValue.value
+        val range = targetRange ?: if (current.selection.length > 0) {
+            current.selection
+        } else null
+
+        _replaceTargetRange.value = range
+        if (range != null && range.length > 0) {
+            val start = range.min.coerceIn(0, current.text.length)
+            val end = range.max.coerceIn(0, current.text.length)
+            _replaceOriginalText.value = current.text.substring(start, end)
+        } else {
+            _replaceOriginalText.value = null
+        }
+
+        _showReplacePopup.value = true
+        speechWrapper.clearResults()
+        speechWrapper.startListening(settings.value.voiceLanguage)
+    }
+
+    fun openFindAndReplace() {
+        _replaceTargetRange.value = null
+        _replaceOriginalText.value = null
         _showReplacePopup.value = true
         speechWrapper.clearResults()
         speechWrapper.startListening(settings.value.voiceLanguage)
@@ -610,11 +651,14 @@ open class EditorViewModel(
 
     fun closeReplacePopup() {
         _showReplacePopup.value = false
+        _replaceTargetRange.value = null
+        _replaceOriginalText.value = null
         speechWrapper.stopListening()
         speechWrapper.clearResults()
     }
 
     fun getSelectedText(): String {
+        _replaceOriginalText.value?.let { if (it.isNotEmpty()) return it }
         val current = _textValue.value
         val sel = current.selection
         return if (sel.length > 0 && sel.max <= current.text.length) {
@@ -623,30 +667,46 @@ open class EditorViewModel(
     }
 
     fun applyReplace(newText: String) {
+        val target = _replaceTargetRange.value
+        if (target != null) {
+            replaceRange(target, newText)
+            closeReplacePopup()
+            ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Replaced" else "Deleted")
+            return
+        }
         val current = _textValue.value
         recordSnapshot(current)
-        val start = current.selection.min
-        val end = current.selection.max
+        val start = current.selection.min.coerceIn(0, current.text.length)
+        val end = current.selection.max.coerceIn(0, current.text.length)
         val newString = current.text.substring(0, start) + newText + current.text.substring(end)
-        _textValue.value = current.copy(text = newString, selection = TextRange(start + newText.length), composition = null)
+        val newCaret = (start + newText.length).coerceIn(0, newString.length)
+        _textValue.value = current.copy(text = newString, selection = TextRange(newCaret, newCaret), composition = null)
+        if (_selActive.value) {
+            _selActive.value = false
+            selectionManager.selAnchor = null
+        }
         cachedHeadings = null
         resetCursorState()
         persistDraft()
         closeReplacePopup()
-        ttsWrapper.speakFeedback(if (newText.isNotBlank()) newText else "Replaced text")
+        ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Replaced" else "Deleted")
     }
 
     fun applyReplace(findText: String, newText: String) {
+        val target = _replaceTargetRange.value
+        if (target != null) {
+            replaceRange(target, newText)
+            closeReplacePopup()
+            ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Replaced" else "Deleted")
+            return
+        }
         val current = _textValue.value
         recordSnapshot(current)
         val currentSel = current.selection
         val newString: String
         val newCaret: Int
 
-        if (currentSel.length > 0 && current.text.substring(currentSel.min, currentSel.max) == findText) {
-            newString = current.text.substring(0, currentSel.min) + newText + current.text.substring(currentSel.max)
-            newCaret = currentSel.min + newText.length
-        } else if (findText.isNotEmpty()) {
+        if (findText.isNotEmpty()) {
             val idx = current.text.indexOf(findText, startIndex = currentSel.end.coerceIn(0, current.text.length))
                 .let { if (it >= 0) it else current.text.indexOf(findText) }
             if (idx >= 0) {
@@ -661,7 +721,11 @@ open class EditorViewModel(
             newCaret = currentSel.min + newText.length
         }
 
-        _textValue.value = current.copy(text = newString, selection = TextRange(newCaret), composition = null)
+        _textValue.value = current.copy(text = newString, selection = TextRange(newCaret, newCaret), composition = null)
+        if (_selActive.value) {
+            _selActive.value = false
+            selectionManager.selAnchor = null
+        }
         cachedHeadings = null
         resetCursorState()
         persistDraft()

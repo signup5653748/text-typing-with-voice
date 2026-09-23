@@ -4,11 +4,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,6 +43,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatQuote
@@ -499,78 +502,120 @@ fun ReadingModeScreen(
                                         } else {
                                             // Decoupled cursor position in Reading Mode - does not change Home Screen selection
                                             readingSelection = TextRange(origOffset, origOffset)
+                                            contextMenuSelectedRange = null
                                         }
-                                    }
-                                },
-                                onLongPress = { longPressOffset ->
-                                    localLayoutResult?.let { layout ->
-                                        val transOffset = layout.getOffsetForPosition(longPressOffset)
-                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                            transOffset,
-                                            cachedOffsetMap
-                                        )
-
-                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset)
-                                        val finalRange = if (wordRange.length > 0) {
-                                            wordRange
-                                        } else {
-                                            // Long press on whitespace/blank area places caret and allows Insert
-                                            TextRange(origOffset, origOffset)
-                                        }
-
-                                        readingSelection = finalRange
-                                        contextMenuTouchOffset = longPressOffset
-                                        contextMenuSelectedRange = finalRange
-                                        showContextMenu = true
                                     }
                                 }
                             )
                         }
                         .pointerInput(textValue.text, settings.hideHeadingSymbols, cachedOffsetMap) {
+                            var isDragSelectionAllowed = false
+                            var dragAnchorOffset = 0
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { startOffset ->
                                     localLayoutResult?.let { layout ->
-                                        val transOffset = layout.getOffsetForPosition(startOffset)
-                                        val origOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                            transOffset,
-                                            cachedOffsetMap
+                                        val wordRange = getWordRangeUnderTouch(
+                                            text = textValue.text,
+                                            touchOffset = startOffset,
+                                            layout = layout,
+                                            cachedOffsetMap = cachedOffsetMap
                                         )
-                                        val wordRange = CursorLogic.getWordRangeAt(textValue.text, origOffset)
-                                        val initialRange = if (wordRange.length > 0) wordRange else TextRange(origOffset, origOffset)
-                                        readingSelection = initialRange
-                                        contextMenuSelectedRange = initialRange
-                                        contextMenuTouchOffset = startOffset
-                                        showContextMenu = false
+
+                                        if (wordRange != null) {
+                                            // Long-press directly on a word: start real word selection
+                                            isDragSelectionAllowed = true
+                                            dragAnchorOffset = wordRange.start
+                                            readingSelection = wordRange
+                                            contextMenuSelectedRange = wordRange
+                                            contextMenuTouchOffset = startOffset
+                                            showContextMenu = true
+                                        } else {
+                                            // Empty-line, whitespace, or blank space past text:
+                                            // Do NOT start or extend any selection! Simply place caret and open context menu.
+                                            isDragSelectionAllowed = false
+                                            val lineIndex = layout.getLineForVerticalPosition(startOffset.y)
+                                                .coerceIn(0, (layout.lineCount - 1).coerceAtLeast(0))
+                                            val lineLeft = layout.getLineLeft(lineIndex)
+                                            val lineRight = layout.getLineRight(lineIndex)
+
+                                            val transOffset = if (startOffset.x > lineRight) {
+                                                layout.getLineEnd(lineIndex, visibleEnd = true)
+                                            } else if (startOffset.x < lineLeft) {
+                                                layout.getLineStart(lineIndex)
+                                            } else {
+                                                layout.getOffsetForPosition(startOffset)
+                                            }
+
+                                            val origOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                                transOffset,
+                                                cachedOffsetMap
+                                            ).coerceIn(0, textValue.text.length)
+
+                                            val caretRange = TextRange(origOffset, origOffset)
+                                            readingSelection = caretRange
+                                            contextMenuSelectedRange = caretRange
+                                            contextMenuTouchOffset = startOffset
+                                            showContextMenu = true
+                                        }
                                     }
                                 },
                                 onDrag = { change, _ ->
-                                    change.consume()
-                                    localLayoutResult?.let { layout ->
-                                        val transOffset = layout.getOffsetForPosition(change.position)
-                                        val currentOrigOffset = SelectionHighlightTransformation.transformedToOriginal(
-                                            transOffset,
-                                            cachedOffsetMap
-                                        )
-                                        val anchor = readingSelection.start
-                                        val updatedRange = TextRange(anchor, currentOrigOffset)
-                                        readingSelection = updatedRange
-                                        contextMenuSelectedRange = updatedRange
-                                        contextMenuTouchOffset = change.position
+                                    if (isDragSelectionAllowed) {
+                                        change.consume()
+                                        showContextMenu = false
+                                        localLayoutResult?.let { layout ->
+                                            val transOffset = layout.getOffsetForPosition(change.position)
+                                            val currentOrigOffset = SelectionHighlightTransformation.transformedToOriginal(
+                                                transOffset,
+                                                cachedOffsetMap
+                                            ).coerceIn(0, textValue.text.length)
+                                            val updatedRange = TextRange(dragAnchorOffset, currentOrigOffset)
+                                            readingSelection = updatedRange
+                                            contextMenuSelectedRange = updatedRange
+                                            contextMenuTouchOffset = change.position
+                                        }
                                     }
                                 },
                                 onDragEnd = {
-                                    if (readingSelection.length > 0) {
-                                        showContextMenu = true
-                                    }
+                                    showContextMenu = true
                                 },
                                 onDragCancel = {
-                                    if (readingSelection.length > 0) {
-                                        showContextMenu = true
-                                    }
+                                    showContextMenu = true
                                 }
                             )
                         }
                 )
+
+                // Visual Caret indicator when long-pressing empty line/whitespace without text selection
+                if (readingSelection.length == 0 && showContextMenu && localLayoutResult != null) {
+                    val layout = localLayoutResult!!
+                    val cursorRect = remember(readingSelection.start, layout, settings.hideHeadingSymbols, cachedOffsetMap) {
+                        try {
+                            val tLen = layout.layoutInput.text.length
+                            if (tLen > 0 || textValue.text.isEmpty()) {
+                                val tPos = if (settings.hideHeadingSymbols && cachedOffsetMap != null) {
+                                    SelectionHighlightTransformation.originalToTransformed(readingSelection.start, cachedOffsetMap)
+                                } else {
+                                    SelectionHighlightTransformation.originalToTransformed(textValue.text, readingSelection.start, settings.hideHeadingSymbols)
+                                }.coerceIn(0, (tLen - 1).coerceAtLeast(0))
+                                layout.getCursorRect(tPos)
+                            } else null
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+
+                    if (cursorRect != null) {
+                        Canvas(modifier = Modifier.matchParentSize()) {
+                            drawLine(
+                                color = Color(0xFF56D0DE),
+                                start = Offset(cursorRect.left, cursorRect.top),
+                                end = Offset(cursorRect.left, cursorRect.bottom),
+                                strokeWidth = 3.dp.toPx()
+                            )
+                        }
+                    }
+                }
 
                 // Selection Drag Handles for adjusting text selection
                 if (readingSelection.length > 0) {
@@ -622,103 +667,101 @@ fun ReadingModeScreen(
                     )
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(18.dp),
+                        shape = RoundedCornerShape(16.dp),
                         color = Color(0xFF161E30),
                         border = BorderStroke(1.5.dp, Color(0xFF26344E)),
                         shadowElevation = 14.dp,
                         modifier = Modifier
-                            .padding(horizontal = 16.dp)
+                            .padding(horizontal = 8.dp)
                             .testTag("reading_mode_context_menu")
                     ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                        Row(
+                            modifier = Modifier
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                if (hasSelection) {
-                                    // Copy
-                                    ContextMenuItem(
-                                        icon = Icons.Default.ContentCopy,
-                                        label = "Copy",
-                                        tint = Color(0xFF56D0DE),
-                                        onClick = {
-                                            val subText = textValue.text.substring(range.min, range.max)
-                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            val clip = ClipData.newPlainText("text", subText)
-                                            clipboard.setPrimaryClip(clip)
-                                            viewModel.ttsWrapper.speakFeedback("Copied")
-                                            showContextMenu = false
-                                            readingSelection = TextRange.Zero
-                                            contextMenuSelectedRange = null
-                                        }
-                                    )
+                            if (hasSelection) {
+                                // 1. Copy
+                                ContextMenuItem(
+                                    icon = Icons.Default.ContentCopy,
+                                    label = "Copy",
+                                    tint = Color(0xFF56D0DE),
+                                    onClick = {
+                                        val subText = textValue.text.substring(range.min, range.max)
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                        val clip = ClipData.newPlainText("text", subText)
+                                        clipboard.setPrimaryClip(clip)
+                                        viewModel.ttsWrapper.speakFeedback("Copied")
+                                        showContextMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
+                                    }
+                                )
 
-                                    VerticalDivider(
-                                        color = Color(0xFF26344E),
-                                        modifier = Modifier.height(28.dp)
-                                    )
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(20.dp)
+                                )
 
-                                    // Listen
-                                    ContextMenuItem(
-                                        icon = Icons.Default.VolumeUp,
-                                        label = "Listen",
-                                        tint = Color(0xFF32D796),
-                                        onClick = {
-                                            val start = range.min
-                                            val end = range.max
-                                            showContextMenu = false
-                                            readingSelection = TextRange.Zero
-                                            contextMenuSelectedRange = null
-                                            viewModel.playFrom(start, end)
-                                        }
-                                    )
+                                // 2. Listen
+                                ContextMenuItem(
+                                    icon = Icons.Default.VolumeUp,
+                                    label = "Listen",
+                                    tint = Color(0xFF32D796),
+                                    onClick = {
+                                        val start = range.min
+                                        val end = range.max
+                                        showContextMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
+                                        viewModel.playFrom(start, end)
+                                    }
+                                )
 
-                                    VerticalDivider(
-                                        color = Color(0xFF26344E),
-                                        modifier = Modifier.height(28.dp)
-                                    )
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(20.dp)
+                                )
 
-                                    // Edit (Voice & Text Replace)
-                                    ContextMenuItem(
-                                        icon = Icons.Default.Edit,
-                                        label = "Edit",
-                                        tint = Color(0xFF38BDF8),
-                                        onClick = {
-                                            isInsertMode = false
-                                            showContextMenu = false
-                                            viewModel.openVoiceReplacePopup()
-                                        }
-                                    )
+                                // 3. Edit (Voice & Text Replace)
+                                ContextMenuItem(
+                                    icon = Icons.Default.Edit,
+                                    label = "Edit",
+                                    tint = Color(0xFF38BDF8),
+                                    onClick = {
+                                        isInsertMode = false
+                                        showContextMenu = false
+                                        viewModel.openVoiceReplacePopup(targetRange = range)
+                                    }
+                                )
 
-                                    VerticalDivider(
-                                        color = Color(0xFF26344E),
-                                        modifier = Modifier.height(28.dp)
-                                    )
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(20.dp)
+                                )
 
-                                    // Delete (Delete selected text)
-                                    ContextMenuItem(
-                                        icon = Icons.Default.DeleteOutline,
-                                        label = "Delete",
-                                        tint = Color(0xFFFF6584),
-                                        onClick = {
-                                            viewModel.deleteRange(range)
-                                            viewModel.ttsWrapper.speakFeedback("Deleted")
-                                            showContextMenu = false
-                                            readingSelection = TextRange.Zero
-                                            contextMenuSelectedRange = null
-                                        }
-                                    )
+                                // 4. Delete (Delete selected text)
+                                ContextMenuItem(
+                                    icon = Icons.Default.DeleteOutline,
+                                    label = "Delete",
+                                    tint = Color(0xFFFF6584),
+                                    onClick = {
+                                        viewModel.deleteRange(range)
+                                        viewModel.ttsWrapper.speakFeedback("Deleted")
+                                        showContextMenu = false
+                                        readingSelection = TextRange.Zero
+                                        contextMenuSelectedRange = null
+                                    }
+                                )
 
-                                    VerticalDivider(
-                                        color = Color(0xFF26344E),
-                                        modifier = Modifier.height(28.dp)
-                                    )
-                                }
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(20.dp)
+                                )
 
-                                // Insert (Voice & Type box to add text right after selection or at caret)
+                                // 5. Insert (Voice & Type box to add text right after selection)
                                 ContextMenuItem(
                                     icon = Icons.Default.PostAdd,
                                     label = "Insert",
@@ -726,9 +769,48 @@ fun ReadingModeScreen(
                                     onClick = {
                                         isInsertMode = true
                                         showContextMenu = false
-                                        viewModel.openVoiceReplacePopup()
+                                        viewModel.openVoiceReplacePopup(targetRange = range)
                                     }
                                 )
+                            } else {
+                                // When caret is placed on empty line / whitespace
+                                ContextMenuItem(
+                                    icon = Icons.Default.PostAdd,
+                                    label = "Insert",
+                                    tint = Color(0xFFA78BFA),
+                                    onClick = {
+                                        isInsertMode = true
+                                        showContextMenu = false
+                                        viewModel.openVoiceReplacePopup(targetRange = range)
+                                    }
+                                )
+
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clipData = clipboard.primaryClip
+                                val clipText = if (clipData != null && clipData.itemCount > 0) {
+                                    clipData.getItemAt(0).text?.toString()
+                                } else null
+
+                                if (!clipText.isNullOrEmpty()) {
+                                    VerticalDivider(
+                                        color = Color(0xFF26344E),
+                                        modifier = Modifier.height(20.dp)
+                                    )
+
+                                    ContextMenuItem(
+                                        icon = Icons.Default.ContentPaste,
+                                        label = "Paste",
+                                        tint = Color(0xFF56D0DE),
+                                        onClick = {
+                                            viewModel.insertAfterRange(range, clipText)
+                                            val insertPos = range.max + clipText.length
+                                            readingSelection = TextRange(insertPos, insertPos)
+                                            viewModel.ttsWrapper.speakFeedback("Pasted")
+                                            showContextMenu = false
+                                            contextMenuSelectedRange = null
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -1372,34 +1454,33 @@ fun ReadingModeScreen(
 
             // Voice Replace / Insert Popup reuse
             if (showReplacePopup) {
-                val targetText = remember(contextMenuSelectedRange, textValue.text) {
-                    val r = contextMenuSelectedRange
-                    if (r != null && r.length > 0 && r.max <= textValue.text.length) {
-                        textValue.text.substring(r.min, r.max)
-                    } else null
-                }
                 ReplacePopup(
                     viewModel = viewModel,
-                    initialTargetText = targetText,
                     isInsertMode = isInsertMode,
                     onApplyReplace = { newText ->
-                        val r = contextMenuSelectedRange
+                        val r = viewModel.replaceTargetRange.value ?: contextMenuSelectedRange
                         if (r != null) {
                             if (isInsertMode) {
                                 viewModel.insertAfterRange(r, newText)
-                                val insertPos = r.max + newText.length
+                                val insertPos = (r.max + newText.length).coerceIn(0, viewModel.textValue.value.text.length)
                                 readingSelection = TextRange(insertPos, insertPos)
+                                viewModel.ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Inserted text" else "")
                             } else {
                                 if (r.length > 0) {
                                     viewModel.replaceRange(r, newText)
-                                    readingSelection = TextRange(r.min + newText.length)
+                                    val newPos = (r.min + newText.length).coerceIn(0, viewModel.textValue.value.text.length)
+                                    readingSelection = TextRange(newPos, newPos)
+                                    viewModel.ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Replaced text" else "Deleted")
                                 } else {
                                     viewModel.insertAfterRange(r, newText)
+                                    val insertPos = (r.max + newText.length).coerceIn(0, viewModel.textValue.value.text.length)
+                                    readingSelection = TextRange(insertPos, insertPos)
+                                    viewModel.ttsWrapper.speakFeedback(if (newText.isNotBlank()) "Inserted text" else "")
                                 }
                             }
                             contextMenuSelectedRange = null
                         } else {
-                            viewModel.applyReplace(targetText ?: "", newText)
+                            viewModel.applyReplace(newText)
                         }
                     }
                 )
@@ -1606,28 +1687,71 @@ private fun ContextMenuItem(
     Surface(
         onClick = onClick,
         color = Color.Transparent,
-        shape = RoundedCornerShape(10.dp),
-        modifier = Modifier.height(48.dp)
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.height(40.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = tint,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(17.dp)
             )
             Text(
                 text = label,
-                fontSize = 14.sp,
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color(0xFFECEEF2)
             )
         }
     }
+}
+
+private fun getWordRangeUnderTouch(
+    text: String,
+    touchOffset: Offset,
+    layout: androidx.compose.ui.text.TextLayoutResult,
+    cachedOffsetMap: SelectionHighlightTransformation.CachedOffsetMap?
+): TextRange? {
+    if (text.isEmpty() || layout.lineCount == 0) return null
+
+    val lineIndex = layout.getLineForVerticalPosition(touchOffset.y).coerceIn(0, (layout.lineCount - 1).coerceAtLeast(0))
+    val lineStart = layout.getLineStart(lineIndex)
+    val lineEnd = layout.getLineEnd(lineIndex)
+    if (lineStart >= lineEnd) {
+        // Blank line (no text)
+        return null
+    }
+
+    val lineLeft = layout.getLineLeft(lineIndex)
+    val lineRight = layout.getLineRight(lineIndex)
+
+    // Check horizontal bounds: if touched in the blank margin or blank space after text on line
+    if (touchOffset.x < lineLeft - 8f || touchOffset.x > lineRight + 8f) {
+        return null
+    }
+
+    val transOffset = layout.getOffsetForPosition(touchOffset)
+    val origOffset = SelectionHighlightTransformation.transformedToOriginal(transOffset, cachedOffsetMap).coerceIn(0, text.length)
+
+    if (origOffset >= text.length || text[origOffset].isWhitespace()) {
+        return null
+    }
+
+    var start = origOffset
+    while (start > 0 && !text[start - 1].isWhitespace()) {
+        start--
+    }
+    var end = origOffset
+    while (end < text.length && !text[end].isWhitespace()) {
+        end++
+    }
+
+    return if (start < end) TextRange(start, end) else null
 }
 
 private fun findParagraphRange(text: String, offset: Int): TextRange {

@@ -376,19 +376,3 @@ fun FloatingMicButton(
         Icon(imageVector = Icons.Default.Mic, contentDescription = "Microphone", tint = Color.Black, modifier = Modifier.size(24.dp))
     }
 }
-
-@Composable
-fun ModeIndicatorBadge(
-    text: String,
-    color: Color
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(color.copy(alpha = 0.15f))
-            .border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 1.dp)
-    ) {
-        Text(text = text, color = color, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-    }
-}

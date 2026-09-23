@@ -56,11 +56,6 @@ fun EditorTopBar(
     searchMatches: List<IntRange>,
     currentMatchIndex: Int,
     displayFileName: String,
-    kActive: Boolean,
-    pActive: Boolean,
-    selActive: Boolean,
-    kbLockActive: Boolean,
-    highlightColor: Color,
     canUndo: Boolean,
     canRedo: Boolean,
     menuExpanded: Boolean,
@@ -104,25 +99,12 @@ fun EditorTopBar(
                     )
                 }
             } else {
-                Column {
-                    Text(
-                        text = displayFileName,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFECEEF2)
-                    )
-                    if (kActive || pActive || selActive || kbLockActive) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            if (kActive) ModeIndicatorBadge(text = "K: CHAR", color = Color(0xFF56D0DE))
-                            if (pActive) ModeIndicatorBadge(text = "P: PARA", color = Color(0xFF56D0DE))
-                            if (selActive) ModeIndicatorBadge(text = "SEL ON", color = highlightColor)
-                            if (kbLockActive) ModeIndicatorBadge(text = "KB LOCK", color = Color(0xFFFF6584))
-                        }
-                    }
-                }
+                Text(
+                    text = displayFileName,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFECEEF2)
+                )
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF0F1420)),
