@@ -61,7 +61,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.SettingsEntity
-import com.example.ui.components.SelectionDragHandles
 import com.example.ui.components.SelectionHighlightTransformation
 import com.example.ui.components.instantClickable
 
@@ -196,21 +195,6 @@ fun EditorTextArea(
                 layout = localLayoutResult,
                 caretOffset = transCaret,
                 highlightColor = highlightColor,
-                modifier = Modifier.matchParentSize()
-            )
-        }
-
-        if (textValue.selection.length > 0) {
-            SelectionDragHandles(
-                text = textValue.text,
-                selection = textValue.selection,
-                layoutResult = localLayoutResult,
-                hideHeadingSymbols = settings.hideHeadingSymbols,
-                highlightColor = highlightColor,
-                cachedMapping = cachedOffsetMap,
-                onSelectionChange = { newRange ->
-                    onTextChanged(textValue.copy(selection = newRange))
-                },
                 modifier = Modifier.matchParentSize()
             )
         }
