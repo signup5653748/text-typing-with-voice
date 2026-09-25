@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextLayoutResult
@@ -107,7 +108,7 @@ fun SelectionDragHandles(
         modifier = modifier
             .pointerInput(Unit) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     val sRect = currentStartCursorRect
                     val eRect = currentEndCursorRect
                     if (sRect == null || eRect == null) return@awaitEachGesture
@@ -131,12 +132,12 @@ fun SelectionDragHandles(
                         else -> null
                     } ?: return@awaitEachGesture
 
-                    // Touch hit a handle! Consume DOWN immediately to prevent background tap listeners from clearing selection
+                    // Touch hit a handle! Consume DOWN immediately at Initial pass to pre-empt underlying text field selection detector
                     down.consume()
                     activeDraggingHandle = draggingHandle
 
                     while (true) {
-                        val event = awaitPointerEvent()
+                        val event = awaitPointerEvent(pass = PointerEventPass.Initial)
                         val dragChange = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!dragChange.pressed) {
                             dragChange.consume()

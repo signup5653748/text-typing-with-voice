@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.TextToolbar
@@ -110,10 +113,12 @@ fun EditorTextArea(
         modifier = modifier.then(
             if (kbLockActive) {
                 Modifier.pointerInput(Unit) {
-                    detectTapGestures { tapOffset ->
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        down.consume()
                         keyboardController?.hide()
                         localLayoutResult?.let { layout ->
-                            val offset = layout.getOffsetForPosition(tapOffset)
+                            val offset = layout.getOffsetForPosition(down.position)
                             val origOffset = SelectionHighlightTransformation.transformedToOriginal(offset, cachedOffsetMap)
                             onCaretTap(origOffset)
                         }
