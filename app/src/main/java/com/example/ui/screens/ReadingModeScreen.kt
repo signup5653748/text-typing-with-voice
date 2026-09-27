@@ -563,7 +563,8 @@ fun ReadingModeScreen(
                                     if (isDragSelectionAllowed) {
                                         change.consume()
                                         showContextMenu = false
-                                        localLayoutResult?.let { layout ->
+                                        val layout = localLayoutResult
+                                     if (layout != null) {
                                             val transOffset = layout.getOffsetForPosition(change.position)
                                             val currentOrigOffset = SelectionHighlightTransformation.transformedToOriginal(
                                                 transOffset,
