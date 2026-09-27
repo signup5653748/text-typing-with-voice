@@ -1148,6 +1148,8 @@ open class EditorViewModel(
     fun updateArrowSize(scale: Float) { viewModelScope.launch { settingsRepo.updateArrowSize(scale) } }
     fun updateAlwaysInsertMicDirectly(always: Boolean) { viewModelScope.launch { settingsRepo.updateAlwaysInsertMicDirectly(always) } }
     fun updateHighlightUnit(unit: String) { viewModelScope.launch { settingsRepo.updateHighlightUnit(unit) } }
+    fun updateContinuousReading(enabled: Boolean) { viewModelScope.launch { settingsRepo.updateContinuousReading(enabled) } }
+    fun updateHighlightOverlayEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepo.updateHighlightOverlayEnabled(enabled) } }
 
     fun isSpeechFeedbackEnabledFor(buttonName: String): Boolean {
         val s = settings.value

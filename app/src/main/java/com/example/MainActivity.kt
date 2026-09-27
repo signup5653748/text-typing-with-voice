@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                         composable("reading_mode") {
                             ReadingModeScreen(
                                 onNavigateBack = { navController.popBackStack() },
+                                onNavigateToSpeech = { navController.navigate("settings/speech") },
                                 viewModel = viewModel
                             )
                         }

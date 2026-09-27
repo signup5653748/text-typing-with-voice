@@ -149,20 +149,6 @@ enum class ReadingFunction(
         description = "Tap any paragraph to read it aloud",
         icon = Icons.Default.Segment
     ),
-    READ_FROM_TOP(
-        id = "from_top",
-        title = "Read from Top",
-        shortLabel = "From Top",
-        description = "Start reading whole text from beginning",
-        icon = Icons.Default.VolumeUp
-    ),
-    PLAY_FROM_CURSOR(
-        id = "from_cursor",
-        title = "Play from Cursor",
-        shortLabel = "From Cursor",
-        description = "Start reading from current cursor position",
-        icon = Icons.Default.PlayArrow
-    ),
     SENTENCE_READ(
         id = "sentence",
         title = "Sentence Read",
@@ -207,6 +193,7 @@ fun findSentenceRange(text: String, offset: Int): TextRange {
 @Composable
 fun ReadingModeScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToSpeech: () -> Unit,
     viewModel: EditorViewModel
 ) {
     val context = LocalContext.current
@@ -268,7 +255,8 @@ fun ReadingModeScreen(
         highlightColor,
         isLightHighlight,
         settings.hideHeadingSymbols,
-        cachedOffsetMap
+        cachedOffsetMap,
+        settings.highlightOverlayEnabled
     ) {
         SelectionHighlightTransformation(
             selection = readingSelection,
@@ -277,7 +265,8 @@ fun ReadingModeScreen(
             speechHighlightColor = highlightColor,
             highlightedTextColor = if (isLightHighlight) Color(0xFF090D16) else Color.White,
             hideHeadingSymbols = settings.hideHeadingSymbols,
-            cachedMapping = cachedOffsetMap
+            cachedMapping = cachedOffsetMap,
+            highlightOverlayEnabled = settings.highlightOverlayEnabled
         )
     }
 
@@ -369,6 +358,68 @@ fun ReadingModeScreen(
                                 onClick = {
                                     menuExpanded = false
                                     showColorPickerDialog = true
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "Read (voice) settings",
+                                        color = Color(0xFFECEEF2)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Read settings",
+                                        tint = Color(0xFF38BDF8)
+                                    )
+                                },
+                                onClick = {
+                                    menuExpanded = false
+                                    onNavigateToSpeech()
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Continuous Reading", color = Color(0xFFECEEF2))
+                                        androidx.compose.material3.Switch(
+                                            checked = settings.continuousReading,
+                                            onCheckedChange = { newVal ->
+                                                viewModel.updateContinuousReading(newVal)
+                                            }
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.updateContinuousReading(!settings.continuousReading)
+                                }
+                            )
+
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Highlight overlay", color = Color(0xFFECEEF2))
+                                        androidx.compose.material3.Switch(
+                                            checked = settings.highlightOverlayEnabled,
+                                            onCheckedChange = { newVal ->
+                                                viewModel.updateHighlightOverlayEnabled(newVal)
+                                            }
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    viewModel.updateHighlightOverlayEnabled(!settings.highlightOverlayEnabled)
                                 }
                             )
                         }
@@ -498,7 +549,11 @@ fun ReadingModeScreen(
                                             }
                                         } else if (isParagraphModeActive) {
                                             val paraRange = findParagraphRange(textValue.text, origOffset)
-                                            viewModel.playFrom(paraRange.start, paraRange.end)
+                                            if (settings.continuousReading) {
+                                                viewModel.playFrom(paraRange.start)
+                                            } else {
+                                                viewModel.playFrom(paraRange.start, paraRange.end)
+                                            }
                                         } else {
                                             // Decoupled cursor position in Reading Mode - does not change Home Screen selection
                                             readingSelection = TextRange(origOffset, origOffset)
@@ -913,30 +968,21 @@ fun ReadingModeScreen(
                                                     viewModel.ttsWrapper.speakFeedback("Paragraph mode off")
                                                 }
                                             }
-                                            ReadingFunction.READ_FROM_TOP -> {
-                                                readingSelection = TextRange.Zero
-                                                contextMenuSelectedRange = null
-                                                showContextMenu = false
-                                                viewModel.restartReading()
-                                            }
-                                            ReadingFunction.PLAY_FROM_CURSOR -> {
-                                                val start = readingSelection.min.coerceIn(0, textValue.text.length)
-                                                readingSelection = TextRange.Zero
-                                                contextMenuSelectedRange = null
-                                                showContextMenu = false
-                                                viewModel.playFrom(start)
-                                            }
                                             ReadingFunction.SENTENCE_READ -> {
-                                                val range = findSentenceRange(textValue.text, readingSelection.min)
-                                                readingSelection = TextRange.Zero
-                                                contextMenuSelectedRange = null
-                                                showContextMenu = false
-                                                if (range.length > 0) {
-                                                    viewModel.playFrom(range.start, range.end)
-                                                } else {
-                                                    viewModel.ttsWrapper.speakFeedback("No sentence found")
-                                                }
-                                            }
+                                                 val range = findSentenceRange(textValue.text, readingSelection.min)
+                                                 readingSelection = TextRange.Zero
+                                                 contextMenuSelectedRange = null
+                                                 showContextMenu = false
+                                                 if (range.length > 0) {
+                                                     if (settings.continuousReading) {
+                                                         viewModel.playFrom(range.start)
+                                                     } else {
+                                                         viewModel.playFrom(range.start, range.end)
+                                                     }
+                                                 } else {
+                                                     viewModel.ttsWrapper.speakFeedback("No sentence found")
+                                                 }
+                                             }
                                             ReadingFunction.CHARACTER_READ -> {
                                                 val cur = readingSelection.min.coerceIn(0, textValue.text.length)
                                                 if (cur < textValue.text.length) {
@@ -1314,82 +1360,6 @@ fun ReadingModeScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Highlighting Mode switcher (Line vs Word)
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFF1E283E),
-                                border = BorderStroke(1.dp, Color(0xFF2E3A52)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Highlight Mode",
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFFECEEF2)
-                                            )
-                                            Text(
-                                                text = if (settings.highlightUnit == "LINE") "Line-by-line (Fast & efficient)" else "Word-by-word",
-                                                fontSize = 12.sp,
-                                                color = Color(0xFF8FA7D8)
-                                            )
-                                        }
-
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            val isLine = settings.highlightUnit == "LINE"
-                                            Surface(
-                                                onClick = {
-                                                    viewModel.updateHighlightUnit("LINE")
-                                                    viewModel.ttsWrapper.speakFeedback("Line highlight mode active")
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = if (isLine) Color(0xFF2563EB) else Color(0xFF161E30),
-                                                border = BorderStroke(1.dp, if (isLine) Color(0xFF56D0DE) else Color(0xFF2E3A52))
-                                            ) {
-                                                Text(
-                                                    text = "Line",
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (isLine) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (isLine) Color.White else Color(0xFF8FA7D8),
-                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                                )
-                                            }
-
-                                            Surface(
-                                                onClick = {
-                                                    viewModel.updateHighlightUnit("WORD")
-                                                    viewModel.ttsWrapper.speakFeedback("Word highlight mode active")
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = if (!isLine) Color(0xFF2563EB) else Color(0xFF161E30),
-                                                border = BorderStroke(1.dp, if (!isLine) Color(0xFF56D0DE) else Color(0xFF2E3A52))
-                                            ) {
-                                                Text(
-                                                    text = "Word",
-                                                    fontSize = 13.sp,
-                                                    fontWeight = if (!isLine) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (!isLine) Color.White else Color(0xFF8FA7D8),
-                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            HorizontalDivider(
-                                color = Color(0xFF26344E),
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            )
-
                             Text(
                                 text = "Choose a function to replace the button. Long-press the button anytime to change again:",
                                 fontSize = 13.sp,

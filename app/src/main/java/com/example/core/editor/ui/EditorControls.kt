@@ -157,7 +157,8 @@ fun EditorTextArea(
                     speechHighlightRange,
                     highlightColor,
                     settings.hideHeadingSymbols,
-                    cachedOffsetMap
+                    cachedOffsetMap,
+                    settings.highlightOverlayEnabled
                 ) {
                     val isLightHighlight = (highlightColor.red * 0.299f + highlightColor.green * 0.587f + highlightColor.blue * 0.114f) > 0.45f
                     SelectionHighlightTransformation(
@@ -168,7 +169,8 @@ fun EditorTextArea(
                         speechHighlightColor = Color(0xFF00E5FF),
                         highlightedTextColor = if (isLightHighlight) Color(0xFF0D111A) else Color.White,
                         hideHeadingSymbols = settings.hideHeadingSymbols,
-                        cachedMapping = cachedOffsetMap
+                        cachedMapping = cachedOffsetMap,
+                        highlightOverlayEnabled = settings.highlightOverlayEnabled
                     )
                 },
                 cursorBrush = SolidColor(Color.Transparent),

@@ -62,7 +62,9 @@ data class SettingsEntity(
     // Launch & Default Visit Screen
     val startOnReadingScreen: Boolean = false,
     // Highlight Mode: "LINE" or "WORD"
-    val highlightUnit: String = "LINE"
+    val highlightUnit: String = "LINE",
+    val continuousReading: Boolean = true,
+    val highlightOverlayEnabled: Boolean = true
 )
 
 class SettingsRepository(private val context: Context) {
@@ -89,6 +91,8 @@ class SettingsRepository(private val context: Context) {
     private val HAPTIC_FEEDBACK_ENABLED = booleanPreferencesKey("hapticFeedbackEnabled")
     private val START_ON_READING_SCREEN = booleanPreferencesKey("startOnReadingScreen")
     private val HIGHLIGHT_UNIT = stringPreferencesKey("highlightUnit")
+    private val CONTINUOUS_READING = booleanPreferencesKey("continuousReading")
+    private val HIGHLIGHT_OVERLAY_ENABLED = booleanPreferencesKey("highlightOverlayEnabled")
     private val STARRED_FOLDERS = stringPreferencesKey("starredFolders")
     private val LAST_SESSION_TEXT = stringPreferencesKey("lastSessionText")
     private val LAST_SESSION_FILE_NAME = stringPreferencesKey("lastSessionFileName")
@@ -168,8 +172,22 @@ class SettingsRepository(private val context: Context) {
             hapticFeedbackEnabled = prefs[HAPTIC_FEEDBACK_ENABLED] ?: true,
             starredFoldersJson = prefs[STARRED_FOLDERS] ?: "",
             startOnReadingScreen = prefs[START_ON_READING_SCREEN] ?: false,
-            highlightUnit = prefs[HIGHLIGHT_UNIT] ?: "LINE"
+            highlightUnit = prefs[HIGHLIGHT_UNIT] ?: "LINE",
+            continuousReading = prefs[CONTINUOUS_READING] ?: true,
+            highlightOverlayEnabled = prefs[HIGHLIGHT_OVERLAY_ENABLED] ?: true
         )
+    }
+
+    suspend fun updateContinuousReading(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[CONTINUOUS_READING] = enabled
+        }
+    }
+
+    suspend fun updateHighlightOverlayEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[HIGHLIGHT_OVERLAY_ENABLED] = enabled
+        }
     }
 
     val settings: Flow<SettingsEntity> = settingsFlow

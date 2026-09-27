@@ -20,7 +20,8 @@ class SelectionHighlightTransformation(
     private val speechHighlightColor: Color = Color(0xFF38BDF8),
     private val highlightedTextColor: Color = Color.White,
     private val hideHeadingSymbols: Boolean = true,
-    private val cachedMapping: CachedOffsetMap? = null
+    private val cachedMapping: CachedOffsetMap? = null,
+    private val highlightOverlayEnabled: Boolean = true
 ) : VisualTransformation {
 
     data class CachedOffsetMap(
@@ -150,6 +151,7 @@ class SelectionHighlightTransformation(
     }
 
     private fun getEffectiveRange(): TextRange? {
+        if (!highlightOverlayEnabled) return null
         return if (selection.length > 0) {
             selection
         } else if (transientHighlight != null && transientHighlight.length > 0) {

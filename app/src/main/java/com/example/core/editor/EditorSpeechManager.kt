@@ -54,6 +54,11 @@ class EditorSpeechManager(
         }
     }
 
+    fun onTextChanged(newTextLength: Int) {
+        if (lastStoppedOffset > newTextLength) lastStoppedOffset = 0
+        if (currentPlaybackOffset > newTextLength) currentPlaybackOffset = 0
+    }
+
     fun stopPlayback() {
         if (_speechHighlightRange.value != null) {
             currentPlaybackOffset = _speechHighlightRange.value!!.start
@@ -141,8 +146,8 @@ class EditorSpeechManager(
             for (line in lines) {
                 val lineLen = line.length
                 if (line.isNotBlank()) {
-                    val lineStart = safeStart + currIndex
-                    val lineEnd = safeStart + currIndex + lineLen
+                    val lineStart = (safeStart + currIndex).coerceIn(0, docText.length)
+                    val lineEnd = (safeStart + currIndex + lineLen).coerceIn(0, docText.length)
                     val wordCount = line.trim().split(Regex("\\s+")).count { it.isNotEmpty() }.coerceAtLeast(1)
                     val estDuration = (wordCount * 280L) + 200L
                     itemsToHighlight.add(SpokenWord(TextRange(lineStart, lineEnd), line, estDuration))
@@ -154,8 +159,8 @@ class EditorSpeechManager(
             for (match in wordRegex.findAll(sanitizedTextToRead)) {
                 val token = match.value
                 if (token.any { it.isLetterOrDigit() }) {
-                    val wordStart = safeStart + match.range.first
-                    val wordEnd = safeStart + match.range.last + 1
+                    val wordStart = (safeStart + match.range.first).coerceIn(0, docText.length)
+                    val wordEnd = (safeStart + match.range.last + 1).coerceIn(0, docText.length)
                     val nextIdx = match.range.last + 1
                     val pauseAfter = if (nextIdx < sanitizedTextToRead.length) {
                         when (sanitizedTextToRead[nextIdx]) {
@@ -199,9 +204,9 @@ class EditorSpeechManager(
                             val lStart = if (prevNl == -1) 0 else prevNl + 1
                             val nextNl = docText.indexOf('\n', s)
                             val lEnd = if (nextNl == -1) docText.length else nextNl
-                            _speechHighlightRange.value = TextRange(lStart, maxOf(lStart, lEnd))
+                            _speechHighlightRange.value = TextRange(lStart.coerceIn(0, docText.length), maxOf(lStart, lEnd).coerceIn(0, docText.length))
                         } else {
-                            _speechHighlightRange.value = TextRange(range.first, range.second)
+                            _speechHighlightRange.value = TextRange(range.first.coerceIn(0, docText.length), range.second.coerceIn(0, docText.length))
                         }
                     }
                 }
