@@ -774,7 +774,7 @@ fun ReadingModeScreen(
                                     }
                                 )
                             } else {
-                                // When caret is placed on empty line / whitespace
+                                // When caret is placed on empty line / whitespace - show both Insert and Enter buttons
                                 ContextMenuItem(
                                     icon = Icons.Default.PostAdd,
                                     label = "Insert",
@@ -783,6 +783,25 @@ fun ReadingModeScreen(
                                         isInsertMode = true
                                         showContextMenu = false
                                         viewModel.openVoiceReplacePopup(targetRange = range)
+                                    }
+                                )
+
+                                VerticalDivider(
+                                    color = Color(0xFF26344E),
+                                    modifier = Modifier.height(20.dp)
+                                )
+
+                                ContextMenuItem(
+                                    icon = Icons.Default.KeyboardReturn,
+                                    label = "Enter",
+                                    tint = Color(0xFF38BDF8),
+                                    onClick = {
+                                        viewModel.insertAfterRange(range, "\n")
+                                        val insertPos = range.max + 1
+                                        readingSelection = TextRange(insertPos, insertPos)
+                                        viewModel.ttsWrapper.speakFeedback("Entered new line")
+                                        showContextMenu = false
+                                        contextMenuSelectedRange = null
                                     }
                                 )
 
