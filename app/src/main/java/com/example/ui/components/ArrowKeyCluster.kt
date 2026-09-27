@@ -58,6 +58,7 @@ fun ArrowKeyCluster(
                 icon = Icons.Default.KeyboardArrowUp,
                 contentDesc = "Move Up",
                 onClick = onMoveUp,
+                bgColor = Color(0xFF23304A),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -74,6 +75,7 @@ fun ArrowKeyCluster(
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 contentDesc = "Move Left",
                 onClick = onMoveLeft,
+                bgColor = Color(0xFF151B28),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             SelCenterButton(
@@ -86,6 +88,7 @@ fun ArrowKeyCluster(
                 icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDesc = "Move Right",
                 onClick = onMoveRight,
+                bgColor = Color(0xFF151B28),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
         }
@@ -102,6 +105,7 @@ fun ArrowKeyCluster(
                 icon = Icons.Default.KeyboardArrowDown,
                 contentDesc = "Move Down",
                 onClick = onMoveDown,
+                bgColor = Color(0xFF23304A),
                 modifier = Modifier.weight(1f).fillMaxHeight()
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -114,9 +118,9 @@ private fun ArrowIconButton(
     icon: ImageVector,
     contentDesc: String,
     onClick: () -> Unit,
+    bgColor: Color = Color(0xFF182032),
     modifier: Modifier = Modifier
 ) {
-    val bgColor = Color(0xFF182032)
     val iconColor = Color(0xFF8FA7D8)
 
     Box(
